@@ -1,9 +1,10 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
-import Box from '@mui/material/Box';
+
 import { ThemeWrapper } from '@opengeoweb/theme';
 import { MapView, MapViewLayer } from '@opengeoweb/webmap-react';
 import { LayerType } from '@opengeoweb/webmap';
+import { Box } from '@mui/material';
 import { DemoWMSViewer } from '../src/components/DemoWMSViewer';
 import { baseLayerWorldMap } from '../src/utils/layerDefinitions';
 

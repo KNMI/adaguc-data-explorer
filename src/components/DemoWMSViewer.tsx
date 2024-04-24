@@ -33,7 +33,7 @@ import WMSDimTimeYearSelector, {
   TimeMode,
 } from './WMSComponents/WMSDimTimeYearSelector';
 import selectLayer from '../utils/selectLayer';
-import WMSTimeSlider from './WMSComponents/WMSTimeSlider';
+import WMSDimensionSlider from './WMSComponents/WMSDimensionSlider';
 import sanitizeHTML from '../utils/sanitizeHTML';
 import WMSStyleSelector from './WMSComponents/WMSStyleSelector';
 
@@ -147,10 +147,10 @@ export const DemoWMSViewer = (): React.ReactElement => {
 
                 <Grid item sx={{ ml: 2, mt: 2, width: '100%' }}>
                   <Grid sx={{ ml: 0, mt: 2, mr: 0, width: '100%' }}>
-                    <WMSTimeSlider
-                      selectedISOTime={selectedISOTime}
+                    <WMSDimensionSlider
+                      selectedDimensionValue={selectedISOTime}
                       layerId={layer.id}
-                      onSelectTime={setISOTime}
+                      onSelectDimensionValue={setISOTime}
                     />
                   </Grid>
 

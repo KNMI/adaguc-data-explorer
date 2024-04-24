@@ -25,7 +25,7 @@ const WMSStyleSelector = ({
     newLayer.style = event.target.value;
     const wmLayer = getWMLayerById(layer.id);
     wmLayer.setStyle(newLayer.style);
-    wmLayer.parentMap.draw();
+    wmLayer.parentMap?.draw();
     onSelectStyle(newLayer);
   };
   if (!layer || !layer.id) return null;
@@ -34,10 +34,10 @@ const WMSStyleSelector = ({
   const styles = wmLayer.getStyles();
   if (!styles) return null;
   const currentStyle = wmLayer.getStyle();
-
+  const styleObject = wmLayer.getStyleObject(currentStyle, 0);
   return (
-    <Box sx={{ height: '100%' }}>
-      <FormControl size="small">
+    <Box sx={{ height: '100%', width: '100%' }}>
+      <FormControl size="small" sx={{ width: 'inherit' }}>
         <InputLabel size="small">Style</InputLabel>
         <Select
           size="small"
@@ -48,7 +48,7 @@ const WMSStyleSelector = ({
           {styles.map((l, i) => (
             // eslint-disable-next-line react/no-array-index-key
             <MenuItem key={`${l.name}i${i}`} value={l.name}>
-              {l.title}
+              {l.title} - {styleObject?.name}
             </MenuItem>
           ))}
         </Select>
