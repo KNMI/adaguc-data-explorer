@@ -110,8 +110,8 @@ export const DemoWMSViewer = (): React.ReactElement => {
 
     const url = map.getWMSGetFeatureInfoRequestURL(
       map.getLayers()[0],
-      `${tevent.mouseX}`,
-      `${tevent.mouseY}`,
+      tevent.mouseX,
+      tevent.mouseY,
       'text/html',
     );
     setGFIInfo('Loading...');
@@ -151,6 +151,7 @@ export const DemoWMSViewer = (): React.ReactElement => {
                       selectedDimensionValue={selectedISOTime}
                       layerId={layer.id}
                       onSelectDimensionValue={setISOTime}
+                      dimensionName="time"
                     />
                   </Grid>
 
