@@ -5,10 +5,38 @@ import {
   WMJSService,
   WMGetServiceFromStore,
   getWMLayerById,
+  WMLayer,
+  WMJSDimension,
 } from '@opengeoweb/webmap';
 import { Layer } from '@opengeoweb/store/src/store/mapStore/types';
 import selectLayer from './selectLayer';
 
+function updateLayerDimsInMap(wmLayer: WMLayer) {
+  const mapLayers = wmLayer.parentMap.getLayers();
+  wmLayer.dimensions.forEach((dim) => {
+    wmLayer.parentMap.setDimension(dim.name, dim.currentValue, false, false);
+  });
+  wmLayer.parentMap.mapdimensions.forEach((mapDim: WMJSDimension) => {
+    mapLayers.forEach((layer: WMLayer) => {
+      layer.dimensions.forEach((layerDim) => {
+        if (layerDim.linked === true && layerDim.name === mapDim.name) {
+          // if (
+          //   mapDim.currentValue === 'current' ||
+          //   mapDim.currentValue === 'default' ||
+          //   mapDim.currentValue === '' ||
+          //   mapDim.currentValue === 'earliest' ||
+          //   mapDim.currentValue === 'middle' ||
+          //   mapDim.currentValue === 'latest'
+          // ) {
+          //   mapDim.currentValue = layerDim.getClosestValue(mapDim.currentValue);
+          // }
+          // console.log(mapDim.currentValue);
+          layerDim.setClosestValue(mapDim.currentValue, false);
+        }
+      });
+    });
+  });
+}
 export interface UseLayerFromServiceInterface {
   layer: Layer;
   serviceUrl: string;
@@ -38,7 +66,9 @@ const useLayerFromService = (
   ): void => {
     const wmLayer = getWMLayerById(layer?.id);
     if (wmLayer) {
-      wmLayer.setDimension(dimensionName, dimensionValue);
+      wmLayer.setDimension(dimensionName, dimensionValue, false);
+
+      updateLayerDimsInMap(wmLayer);
       // re-render
       update();
       // Draw map
@@ -56,6 +86,7 @@ const useLayerFromService = (
       (availableLayersFromService) => {
         setAvailableLayers(availableLayersFromService);
         if (availableLayersFromService.length > 0) {
+          console.log('Selecting layer', availableLayersFromService[0]);
           selectLayer(availableLayersFromService[0], wmsService)
             .then(setLayer)
             .catch((e) => {

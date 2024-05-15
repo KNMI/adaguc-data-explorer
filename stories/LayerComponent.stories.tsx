@@ -1,25 +1,21 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
 import { ThemeWrapper } from '@opengeoweb/theme';
-import { styled } from '@mui/material/styles';
-import { Grid, Paper } from '@mui/material';
+import { Box, Grid } from '@mui/material';
 import { webmapUtils } from '@opengeoweb/webmap';
 import { MapView, MapViewLayer } from '@opengeoweb/webmap-react';
+import { Mosaic } from 'react-mosaic-component';
+import 'react-mosaic-component/react-mosaic-component.css';
+import { ReactSortable } from 'react-sortablejs';
+import './story.css';
 import LayerSelector from '../src/components/LayerComponent/WMSLayerSelector';
 import selectLayer from '../src/utils/selectLayer';
+
 import useLayerFromService, {
   UseLayerFromServiceInterface,
 } from '../src/utils/useLayerFromService';
 import { LayerComponent } from '../src/components/LayerComponent/LayerComponent';
 import { baseLayerWorldMap } from '../src/utils/layerDefinitions';
-
-const Item = styled(Paper)(({ theme }) => ({
-  backgroundColor: theme.palette.mode === 'dark' ? '#1A2027' : '#fff',
-  ...theme.typography.body2,
-  padding: theme.spacing(0),
-  textAlign: 'center',
-  color: theme.palette.text.secondary,
-}));
 
 export const LayerSelectorStory = (): React.ReactElement => {
   const wmsService =
@@ -67,54 +63,115 @@ export const LayerComponentStory = (): React.ReactElement => {
       setLayer={setLayer}
       getDimensionValue={getDimensionValue}
       setDimensionValue={setDimensionValue}
+      update={() => {}}
+      key=""
     />
   );
 };
 LayerComponentStory.storyName = 'LayerComponent';
 
 export const LayerListComponentStory = (): React.ReactElement => {
-  const layerList: UseLayerFromServiceInterface[] = [
-    useLayerFromService(
-      'https://geoservices.knmi.nl/adaguc-server?DATASET=RADAR&SERVICE=WMS&',
-    ),
-    useLayerFromService(
-      'https://geoservices.knmi.nl/adaguc-server?DATASET=HARM_N25&SERVICE=WMS&',
-    ),
-  ];
+  const [count, setUpdate] = React.useState(0);
 
+  const update = () => {
+    setUpdate((count + 1) % 10);
+  };
+
+  const a = useLayerFromService(
+    'https://geoservices.knmi.nl/adaguc-server?DATASET=RADAR&SERVICE=WMS&',
+  );
+  const b = useLayerFromService(
+    'https://geoservices.knmi.nl/adaguc-server?DATASET=HARM_N25&SERVICE=WMS&',
+  );
+  const h = [a, b];
+
+  // const layerList = React.useRef<UseLayerFromServiceInterface[]>(h).current;
+  // console.log(layerList);
+  const layerList = h;
   const mapId = React.useRef<string>(webmapUtils.generateMapId()).current;
+
+  const sortabkeLayerList = (
+    <ReactSortable
+      setList={(newList) => {
+        // setLayerList(newList);
+      }}
+      onSort={({ oldIndex, newIndex }) => {
+        console.log(oldIndex, newIndex);
+        const la = layerList[oldIndex];
+        const lb = layerList[newIndex];
+
+        layerList[oldIndex] = lb;
+        layerList[newIndex] = la;
+        update();
+        // const wmjsMap = getMapById(mapId);
+        // wmjsMap.m
+      }}
+      list={layerList.map((layer) => {
+        return layer.key;
+      })}
+    >
+      {layerList.map(
+        (service: UseLayerFromServiceInterface): React.ReactElement => {
+          return <LayerComponent key={service.key} {...service} />;
+        },
+      )}
+    </ReactSortable>
+  );
+  const mapViewComponent = (
+    <MapView mapId={mapId}>
+      <MapViewLayer {...baseLayerWorldMap} />
+      {layerList.map(
+        (service: UseLayerFromServiceInterface): React.ReactElement => {
+          return (
+            <MapViewLayer
+              key={service.key}
+              id={service.key}
+              {...service.layer}
+            />
+          );
+        },
+      )}
+    </MapView>
+  );
+
+  const mosaicItems: { [viewId: string]: JSX.Element } = {
+    a: (
+      <div>
+        <Box sx={{ width: 'inherit', height: 'inherit', overflowY: 'scroll' }}>
+          {sortabkeLayerList}
+        </Box>
+      </div>
+    ),
+    b: <div>{mapViewComponent}</div>,
+    c: <div>Bottom Right Window</div>,
+  };
+
   return (
-    <Grid container style={{ height: '80vh', background: 'grey' }}>
-      <Grid item xs={3} style={{ height: '100%' }}>
-        <Item style={{ height: '100%' }}>
-          {layerList.map(
-            (service: UseLayerFromServiceInterface): React.ReactElement => {
-              return <LayerComponent key={service.key} {...service} />;
-            },
-          )}
-        </Item>
-      </Grid>
-      <Grid item xs={9}>
-        <Item style={{ height: '100%' }}>
-          <div style={{ height: '100%' }}>
-            <MapView mapId={mapId}>
-              <MapViewLayer {...baseLayerWorldMap} />
-              {layerList.map(
-                (service: UseLayerFromServiceInterface): React.ReactElement => {
-                  return (
-                    <MapViewLayer
-                      key={service.key}
-                      id={service.key}
-                      {...service.layer}
-                    />
-                  );
-                },
-              )}
-            </MapView>
-          </div>
-        </Item>
-      </Grid>
-    </Grid>
+    <div
+      style={{
+        width: '100vw',
+        height: '100vh',
+        display: 'flex',
+        margin: 0,
+        padding: 0,
+        overflow: 'hidden',
+      }}
+    >
+      <Mosaic<string>
+        renderTile={(id) => mosaicItems[id]}
+        initialValue={{
+          direction: 'row',
+          first: 'a',
+          second: {
+            direction: 'row',
+            first: 'b',
+            second: 'c',
+            splitPercentage: 99,
+          },
+          splitPercentage: 30,
+        }}
+      />
+    </div>
   );
 };
 LayerListComponentStory.storyName = 'LayerListComponent';

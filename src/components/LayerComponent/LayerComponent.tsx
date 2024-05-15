@@ -67,7 +67,7 @@ export const LayerComponent = ({
           </Toolbar>
         </AppBar>
         <Grid container direction="column">
-          <Grid item sx={{ p: 2 }}>
+          <Grid item sx={{ p: 1 }} style={{ width: 'inherit' }}>
             <WMSLayerSelector
               layer={layer}
               layers={availableLayers}
@@ -81,7 +81,7 @@ export const LayerComponent = ({
             />
           </Grid>
 
-          <Grid item sx={{ p: 2 }}>
+          <Grid item sx={{ p: 1 }} style={{ width: 'inherit' }}>
             <WMSStyleSelector
               layer={layer}
               onSelectStyle={(data) => {
@@ -89,7 +89,7 @@ export const LayerComponent = ({
               }}
             />
           </Grid>
-          <Grid item sx={{ p: 2 }}>
+          <Grid item sx={{ p: 1 }} style={{ width: 'inherit' }}>
             {getWMLayerById(layer?.id)?.dimensions.map((layerDimension) => {
               return (
                 <WMSDimensionSlider
