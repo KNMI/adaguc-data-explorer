@@ -2,9 +2,9 @@
 import * as React from 'react';
 import { LayerProps } from '@opengeoweb/webmap';
 import { useAppDispatch, useAppSelector } from '../store/store';
-import { fetchWMSService } from '../store/thunks';
-import WMSLayerSelector from './WMSComponents/WMSLayerSelector';
-import * as selectors from '../store/selectors';
+import { thunks } from '../store/thunks';
+import WMSLayerSelector from '../components/WMSComponents/WMSLayerSelector';
+import { selectors } from '../store/selectors';
 import { ViewerState } from '../store/types';
 
 const ReduxLayerSelector = (): React.ReactElement => {
@@ -14,7 +14,7 @@ const ReduxLayerSelector = (): React.ReactElement => {
 
   // Fetch WMS service from redux store
   React.useEffect(() => {
-    dispatch(fetchWMSService(service));
+    dispatch(thunks.fetchWMSService(service));
   }, []);
 
   // Read available layers from redux store

@@ -86,7 +86,6 @@ const useLayerFromService = (
       (availableLayersFromService) => {
         setAvailableLayers(availableLayersFromService);
         if (availableLayersFromService.length > 0) {
-          console.log('Selecting layer', availableLayersFromService[0]);
           selectLayer(availableLayersFromService[0], wmsService)
             .then(setLayer)
             .catch((e) => {

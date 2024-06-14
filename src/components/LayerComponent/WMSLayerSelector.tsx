@@ -9,16 +9,15 @@ import {
   SelectChangeEvent,
 } from '@mui/material';
 import { LayerProps } from '@opengeoweb/webmap';
-import { Layer } from '@opengeoweb/store/src/store/mapStore/types';
 
 interface WMSLayerSelectorProps {
-  layer: Layer;
+  layerName: string;
   layers: LayerProps[];
-  onSelectLayer: (layer: LayerProps) => void;
+  onSelectLayer: (layerName: string) => void;
 }
 
 const WMSLayerSelector = ({
-  layer,
+  layerName,
   layers,
   onSelectLayer,
 }: WMSLayerSelectorProps): React.ReactElement<WMSLayerSelectorProps> => {
@@ -26,17 +25,20 @@ const WMSLayerSelector = ({
     const selectedLayerIndex = layers.findIndex(
       (l) => l.name === event.target.value,
     );
-    onSelectLayer(layers[selectedLayerIndex]);
+    onSelectLayer(layers[selectedLayerIndex].name);
   };
 
+  if (!layers || !layers.length) {
+    return null;
+  }
   return (
     <Box sx={{ height: '100%', width: '100%' }}>
       <FormControl size="small" sx={{ width: 'inherit' }}>
         <InputLabel size="small">Layer</InputLabel>
-        {layer?.name && (
+        {layerName && (
           <Select
             size="small"
-            value={layer?.name}
+            value={layerName}
             label="Layer"
             onChange={handleChange}
           >

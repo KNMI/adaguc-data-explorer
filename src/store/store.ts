@@ -11,11 +11,11 @@ import {
 } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import { AdagucMapsState, ViewerState } from './types';
-import { fetchWMSService } from './thunks';
+import { addLayer, fetchWMSService } from './thunks';
 import { reducers } from './reducers';
 
 const initialState: AdagucMapsState = {
-  maps: { map1: { layers: [] } },
+  maps: {},
   services: {},
 };
 
@@ -30,21 +30,16 @@ const ViewerSlice = createSlice({
   reducers,
   extraReducers: (builder) => {
     // Add reducers for additional action types here, and handle loading state as needed
-    builder.addCase(fetchWMSService.fulfilled, (state, action) => {
-      // Add user to the state array
-      const { payload } = action;
-      const { id, layers, serviceUrl } = payload;
-      state.services[id] = {
-        id,
-        layers,
-        serviceUrl,
-      };
-    });
+    builder.addCase(
+      fetchWMSService.fulfilled,
+      reducers.fullFillfetchWMSService,
+    );
+    builder.addCase(addLayer.fulfilled, reducers.fullFillAddLayer);
   },
 });
 
 // The actions contained in the slice are exported for usage in our components
-export const { addWMSService } = ViewerSlice.actions;
+export const { actions } = ViewerSlice;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AppThunkDispatch = ThunkDispatch<ViewerState, any, AnyAction>;
