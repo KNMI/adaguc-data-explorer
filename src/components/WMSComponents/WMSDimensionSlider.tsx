@@ -1,8 +1,11 @@
 /* eslint-disable no-console */
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
-import { Box, Slider, Typography } from '@mui/material';
+import { Box, Button, IconButton, Slider, Typography } from '@mui/material';
+import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { getWMLayerById } from '@opengeoweb/webmap';
+import Checkbox from '@mui/material/Checkbox';
 
 interface WMSDimensionSliderProps {
   selectedDimensionValue: string;
@@ -37,19 +40,48 @@ const WMSDimensionSlider = ({
   const dimIndex = layerDim.getIndexForValue(selectedDimValue);
 
   return (
-    <Box sx={{ height: '100%', margin: '0 20px' }}>
+    <Box sx={{ height: '100%', margin: '0' }}>
       <Typography>
         Dimension {layerDim?.name} in {layerDim?.units} - ({dimIndex}-
         {layerDim.size()})
       </Typography>
-      <Slider
-        value={dimIndex}
-        onChange={handleChange}
-        size="small"
-        min={0}
-        max={layerDim.size()}
-        orientation="horizontal"
-      />
+      <div style={{ display: 'flex' }}>
+        <Checkbox
+          defaultChecked={layerDim.linked}
+          onChange={(e, checked) => {
+            layerDim.linked = checked;
+          }}
+        />
+        <Slider
+          value={dimIndex}
+          onChange={handleChange}
+          size="small"
+          min={0}
+          max={layerDim.size()}
+          orientation="horizontal"
+        />
+        <IconButton
+          style={{ marginLeft: '20px' }}
+          size="small"
+          edge="end"
+          color="inherit"
+          onClick={() => {
+            handleChange(null, dimIndex - 1);
+          }}
+        >
+          <ArrowBackIosIcon fontSize="small" />
+        </IconButton>
+        <IconButton
+          size="small"
+          edge="end"
+          color="inherit"
+          onClick={() => {
+            handleChange(null, dimIndex + 1);
+          }}
+        >
+          <ArrowForwardIosIcon fontSize="small" />
+        </IconButton>
+      </div>
       <Typography>{selectedDimValue}</Typography>
     </Box>
   );

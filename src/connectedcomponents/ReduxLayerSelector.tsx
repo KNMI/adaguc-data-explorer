@@ -3,9 +3,9 @@ import * as React from 'react';
 import { LayerProps } from '@opengeoweb/webmap';
 import { useAppDispatch, useAppSelector } from '../store/store';
 import { thunks } from '../store/thunks';
-import WMSLayerSelector from '../components/WMSComponents/WMSLayerSelector';
 import { selectors } from '../store/selectors';
 import { ViewerState } from '../store/types';
+import WMSLayerSelector from '../components/LayerComponent/WMSLayerSelector';
 
 const ReduxLayerSelector = (): React.ReactElement => {
   const dispatch = useAppDispatch();
@@ -31,11 +31,13 @@ const ReduxLayerSelector = (): React.ReactElement => {
       setLayer(availableLayers[0]);
     }
   }, [availableLayers]);
-
+  console.log('!');
   return (
     <WMSLayerSelector
-      layer={layer}
-      layers={availableLayers}
+      // layer={layer}
+      // layers={availableLayers}
+      layerName={layer.name}
+      serviceUrl={service}
       onSelectLayer={(selectedLayer) => {
         setLayer(selectedLayer);
       }}

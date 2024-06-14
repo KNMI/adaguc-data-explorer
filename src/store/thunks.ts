@@ -33,20 +33,24 @@ export const addLayer = createAsyncThunk(
     const { serviceUrl, name, mapId } = payload;
     await dispatch(fetchWMSService(serviceUrl));
     const layers = selectors.getAvailableLayers(getState(), serviceUrl);
-    const layer = layers.find((layeri) => layeri.name === name);
-    if (!layer) {
-      return rejectWithValue('Layer not found');
+
+    if (layers.length === 0) {
+      return rejectWithValue('No layers in service');
     }
+
+    let layerToFind = layers.find((layeri) => layeri.name === name);
+
+    const layerName = layerToFind ? name : layers[0].name;
     const id = generateLayerId();
     const wmLayer = new WMLayer({
       id,
       service: serviceUrl,
-      name,
+      name: layerName,
       layerType: LayerType.mapLayer,
     });
     await wmLayer.parseLayerPromise();
     return {
-      name,
+      name: layerName,
       serviceUrl,
       mapId,
       id,

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { LayerProps, Style, getWMJSMapById } from '@opengeoweb/webmap';
+import { Style, getWMJSMapById } from '@opengeoweb/webmap';
 import { actions, useAppDispatch, useAppSelector } from '../store/store';
 import { selectors } from '../store/selectors';
 import { AdagucLayer, ViewerState } from '../store/types';
@@ -47,9 +47,9 @@ export const ReduxLayerComponent = ({
     selectors.getStyleListForLayer(state, layer),
   );
 
-  const availableLayers = useAppSelector((state: ViewerState): LayerProps[] =>
-    selectors.getAvailableLayers(state, layer?.serviceUrl),
-  );
+  // const availableLayers = useAppSelector((state: ViewerState): LayerProps[] =>
+  //   selectors.getAvailableLayers(state, layer?.serviceUrl),
+  // );
 
   const changeLayerDimension = (
     dimensionName: string,
@@ -82,7 +82,6 @@ export const ReduxLayerComponent = ({
       onSelectLayer={(_layer) => {
         selectLayer(_layer);
       }}
-      availableLayers={availableLayers}
       getDimensionValue={(dimensionName: string): string => {
         const foundDim = layer?.dimensions?.find(
           (dim) => dim.name === dimensionName,
