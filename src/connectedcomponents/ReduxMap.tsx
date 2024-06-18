@@ -1,26 +1,15 @@
 /* eslint-disable react/jsx-props-no-spreading */
 /* eslint-disable @typescript-eslint/no-floating-promises */
 import * as React from 'react';
-import {
-  AppBar,
-  Box,
-  Button,
-  IconButton,
-  Toolbar,
-  Typography,
-} from '@mui/material';
 import { Mosaic } from 'react-mosaic-component';
-import { ReactSortable } from 'react-sortablejs';
-import MenuIcon from '@mui/icons-material/Menu';
 import { ThemeWrapper } from '@opengeoweb/theme';
-import { actions, useAppDispatch, useAppSelector } from '../store/store';
-import { selectors } from '../store/selectors';
-import { ViewerState } from '../store/types';
+import { actions, useAppDispatch } from '../store/store';
 import { thunks } from '../store/thunks';
-import { ReduxLayerComponent } from './ReduxLayerComponent';
 import { ReduxMapViewComponent } from './ReduxMapViewComponent';
 import 'react-mosaic-component/react-mosaic-component.css';
 import '../../stories/story.css';
+import { SortableLayerList } from './SortableLayerList';
+import { AdagucAppBar } from './AdagucAppBar';
 
 const ReduxMap = (): React.ReactElement => {
   const dispatch = useAppDispatch();
@@ -30,10 +19,6 @@ const ReduxMap = (): React.ReactElement => {
   const update = () => {
     setCount(count + 1);
   };
-
-  const layersInMap = useAppSelector((state: ViewerState): string[] =>
-    selectors.getMapLayerIds(state, mapId),
-  );
 
   // Set first layer as default
   React.useEffect(() => {
@@ -51,88 +36,42 @@ const ReduxMap = (): React.ReactElement => {
         // eslint-disable-next-line no-console
         console.warn(e);
       });
-    dispatch(
-      thunks.addLayer({
-        mapId,
-        serviceUrl:
-          'https://geoservices.knmi.nl/adaguc-server?DATASET=HARM_N25&SERVICE=WMS&',
-        name: 'air_temperature__at_2m',
-      }),
-    )
-      .unwrap()
-      .catch((e) => {
-        // eslint-disable-next-line no-console
-        console.warn(e);
-      });
+    // dispatch(
+    //   thunks.addLayer({
+    //     mapId,
+    //     serviceUrl:
+    //       'https://geoservices.knmi.nl/adaguc-server?DATASET=HARM_N25&SERVICE=WMS&',
+    //     name: 'air_temperature__at_2m',
+    //   }),
+    // )
+    //   .unwrap()
+    //   .catch((e) => {
+    //     // eslint-disable-next-line no-console
+    //     console.warn(e);
+    //   });
 
-    dispatch(
-      thunks.addLayer({
-        mapId,
-        serviceUrl:
-          'https://adaguc-server-msg-cpp-portal.pmc.knmi.cloud/adaguc-server?DATASET=msgrt&SERVICE=WMS&',
-        name: 'air_temperature__at_2m',
-      }),
-    )
-      .unwrap()
-      .catch((e) => {
-        // eslint-disable-next-line no-console
-        console.warn(e);
-      });
+    // dispatch(
+    //   thunks.addLayer({
+    //     mapId,
+    //     serviceUrl:
+    //       'https://adaguc-server-msg-cpp-portal.pmc.knmi.cloud/adaguc-server?DATASET=msgrt&SERVICE=WMS&',
+    //     name: 'air_temperature__at_2m',
+    //   }),
+    // )
+    //   .unwrap()
+    //   .catch((e) => {
+    //     // eslint-disable-next-line no-console
+    //     console.warn(e);
+    //   });
   }, []);
-
-  const setLayerOrderByIds = (layerListIds: string[]) => {
-    dispatch(actions.setLayerOrderByIds({ mapId, layerListIds }));
-  };
-  const appBar = (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar position="static">
-        <Toolbar>
-          <IconButton
-            size="large"
-            edge="start"
-            color="inherit"
-            aria-label="menu"
-            sx={{ mr: 2 }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }} />
-          <Button color="inherit">Add...</Button>
-        </Toolbar>
-      </AppBar>
-    </Box>
-  );
-
-  const sortabkeLayerList = (
-    <div style={{ overflowY: 'scroll', width: 'inherit', height: '100%' }}>
-      <ReactSortable
-        setList={(newList) => {
-          if (layersInMap.join() === newList.map((it) => it.id).join()) {
-            return;
-          }
-          setLayerOrderByIds(newList.map((it) => it.id));
-        }}
-        list={layersInMap.map((l) => {
-          return { id: l };
-        })}
-      >
-        {layersInMap.map((layerId, k): React.ReactElement => {
-          return (
-            <ReduxLayerComponent
-              key={layerId}
-              layerId={layerId}
-              mapId={mapId}
-              layerIndex={k}
-            />
-          );
-        })}
-      </ReactSortable>
-    </div>
-  );
 
   const mosaicItems: { [viewId: string]: JSX.Element } = {
     a: <div />,
-    b: <div>{sortabkeLayerList}</div>,
+    b: (
+      <div>
+        <SortableLayerList mapId={mapId} />
+      </div>
+    ),
     c: (
       <div>
         <ReduxMapViewComponent mapId={mapId} update={update} />
@@ -154,7 +93,9 @@ const ReduxMap = (): React.ReactElement => {
           overflow: 'hidden',
         }}
       >
-        <div style={{ height: '60px' }}>{appBar}</div>
+        <div style={{ height: '60px' }}>
+          <AdagucAppBar />
+        </div>
         <div style={{ flex: 1 }}>
           <Mosaic<string>
             renderTile={(id) => mosaicItems[id]}

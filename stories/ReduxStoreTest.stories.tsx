@@ -1,28 +1,13 @@
 import { Provider } from 'react-redux';
 import * as React from 'react';
 
+import { ThemeWrapper } from '@opengeoweb/theme';
 import store from '../src/store/store';
-import ReduxLayerSelector from '../src/connectedcomponents/ReduxLayerSelector';
 import ReduxMap from '../src/connectedcomponents/ReduxMap';
-import { ThemeWrapper, createTheme } from '@opengeoweb/theme';
-
-export const ReduxLayerSelectorStory = (): React.ReactElement => {
-  return (
-    <Provider store={store}>
-      <ReduxLayerSelector />
-    </Provider>
-  );
-};
-
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-  },
-});
 
 export const ReduxMapStory = (): React.ReactElement => {
   return (
-    <ThemeWrapper theme={darkTheme}>
+    <ThemeWrapper>
       <Provider store={store}>
         <ReduxMap />
       </Provider>
@@ -30,7 +15,7 @@ export const ReduxMapStory = (): React.ReactElement => {
   );
 };
 
-ReduxLayerSelectorStory.storyName = 'ReduxLayerSelectorStory';
+ReduxMapStory.storyName = 'ReduxMapStory';
 
 export default {
   title: 'ReduxStoreTest',
