@@ -77,6 +77,7 @@ export const ReduxLayerComponent = ({
   return (
     <LayerComponent
       layer={layer}
+      layerIndex={layerIndex}
       key={layer?.id}
       serviceUrl={layer?.serviceUrl}
       onSelectLayer={(_layer) => {

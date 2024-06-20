@@ -1,12 +1,17 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
 
-import { Style, getWMLayerById } from '@opengeoweb/webmap';
+import {
+  Style,
+  getLegendGraphicURLForLayer,
+  getWMLayerById,
+} from '@opengeoweb/webmap';
 import { Card, CardContent, CardHeader, Grid, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
+import { debounce } from 'lodash';
 import WMSDimensionSlider from '../WMSComponents/WMSDimensionSlider';
 import WMSStyleSelector from '../WMSComponents/WMSStyleSelector';
 import WMSLayerSelector from './WMSLayerSelector';
@@ -14,6 +19,7 @@ import { AdagucLayer } from '../../store/types';
 
 export interface LayerComponentProps {
   serviceUrl: string;
+  layerIndex: number;
   layer: AdagucLayer;
   selectedStyleName: string;
   styles: Style[];
@@ -35,6 +41,7 @@ export const LayerComponent = ({
   setDimensionValue,
   removeLayer,
   update: updateParent,
+  layerIndex,
 }: LayerComponentProps): React.ReactElement<LayerComponentProps> => {
   const [count, setUpdate] = React.useState(0);
 
@@ -42,8 +49,21 @@ export const LayerComponent = ({
     updateParent();
     setUpdate((count + 1) % 10);
   };
-  const cardTitle = `${getWMLayerById(layer?.id)?.title}`;
-  const cardSubTitle = `Layer ${getWMLayerById(layer?.id)?.name}`;
+  const wmLayer = getWMLayerById(layer?.id);
+  const cardTitle = `${wmLayer?.title}`;
+  const cardSubTitle = `Name: ${layer?.name}`;
+
+  const [legendGraphicUrl, setLegendGraphic] = React.useState<string>('');
+
+  const debouncedHandleChange = React.useRef(
+    debounce((dwmLayer) => {
+      const undebouncedLegendGraphic = getLegendGraphicURLForLayer(dwmLayer);
+      setLegendGraphic(undebouncedLegendGraphic);
+    }, 500),
+  ).current;
+
+  debouncedHandleChange(wmLayer);
+
   const cardActions = (
     <>
       <IconButton
@@ -64,7 +84,7 @@ export const LayerComponent = ({
         color="inherit"
         aria-label="menu"
         onClick={() => {
-          const wmLayer = getWMLayerById(layer?.id);
+          // const wmLayer = getWMLayerById(layer?.id);
           if (wmLayer) {
             wmLayer.enabled = !wmLayer.enabled;
             update();
@@ -97,163 +117,80 @@ export const LayerComponent = ({
         title={cardTitle}
         subheader={cardSubTitle}
         action={cardActions}
-        style={{ borderBottom: '2px solid #888' }}
+        titleTypographyProps={{
+          fontSize: '16px',
+          overflow: 'hidden',
+          width: '100%',
+          display: 'block',
+          height: '20px',
+          maxWidth: '280px',
+          noWrap: true,
+        }}
+        subheaderTypographyProps={{
+          fontSize: '14px',
+          overflow: 'hidden',
+          display: 'block',
+          position: 'absolute',
+          width: '100%',
+          noWrap: true,
+        }}
+        style={{ borderBottom: '2px solid #888', height: '70px' }}
       />
       <CardContent>
-        <Grid container direction="column">
-          <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
-            <WMSLayerSelector
-              layerName={layer?.name}
-              serviceUrl={serviceUrl}
-              onSelectLayer={onSelectLayer}
-            />
+        <Grid container direction="row">
+          <Grid item xs={10}>
+            <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
+              <WMSLayerSelector
+                layerName={layer?.name}
+                serviceUrl={serviceUrl}
+                onSelectLayer={(layerName) => {
+                  onSelectLayer(layerName);
+                  update();
+                }}
+              />
+            </Grid>
+
+            <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
+              <WMSStyleSelector
+                styleName={selectedStyleName}
+                styles={styles}
+                onSelectStyle={(styleName) => {
+                  onSelectStyle(styleName);
+                }}
+              />
+            </Grid>
+            <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
+              {getWMLayerById(layer?.id)?.dimensions.map((layerDimension) => {
+                return (
+                  <WMSDimensionSlider
+                    key={`${layer.name}${layerDimension.name}${layerIndex}`}
+                    selectedDimensionValue={getDimensionValue(
+                      layerDimension.name,
+                    )}
+                    layerId={layer?.id}
+                    onSelectDimensionValue={(value) => {
+                      setDimensionValue(layerDimension.name, value);
+                    }}
+                    dimensionName={layerDimension.name}
+                  />
+                );
+              })}
+            </Grid>
           </Grid>
 
-          <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
-            <WMSStyleSelector
-              styleName={selectedStyleName}
-              styles={styles}
-              onSelectStyle={(styleName) => {
-                onSelectStyle(styleName);
-              }}
-            />
-          </Grid>
-          <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
-            {getWMLayerById(layer?.id)?.dimensions.map((layerDimension) => {
-              return (
-                <WMSDimensionSlider
-                  key={layerDimension.name}
-                  selectedDimensionValue={getDimensionValue(
-                    layerDimension.name,
-                  )}
-                  layerId={layer?.id}
-                  onSelectDimensionValue={(value) => {
-                    setDimensionValue(layerDimension.name, value);
-                  }}
-                  dimensionName={layerDimension.name}
-                />
-              );
-            })}
+          <Grid
+            item
+            xs={2}
+            style={{
+              height: 'inherit',
+              maxHeight: '180px',
+              overflow: 'hidden',
+            }}
+          >
+            <img alt="legend" width="100%" src={legendGraphicUrl} />
           </Grid>
         </Grid>
       </CardContent>
     </Card>
   );
 };
-
-// export const LayerComponentAppbar = ({
-//   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-//   serviceUrl,
-//   layer,
-//   onSelectLayer,
-//   onSelectStyle,
-//   availableLayers,
-//   selectedStyleName,
-//   styles,
-//   getDimensionValue,
-//   setDimensionValue,
-//   removeLayer,
-//   update: updateParent,
-// }: LayerComponentProps): React.ReactElement<LayerComponentProps> => {
-//   const [count, setUpdate] = React.useState(0);
-
-//   const update = () => {
-//     updateParent();
-//     setUpdate((count + 1) % 10);
-//   };
-//   return (
-//     <ThemeWrapper>
-//       <Grid container direction="column" style={{ background: 'white' }}>
-//         <AppBar position="static">
-//           <Toolbar variant="dense">
-//             <Typography
-//               variant="subtitle1"
-//               component="div"
-//               sx={{ flexGrow: 1 }}
-//             >
-//               Layer {getWMLayerById(layer?.id)?.name}
-//             </Typography>
-//             <IconButton
-//               size="small"
-//               edge="end"
-//               color="inherit"
-//               aria-label="menu"
-//               onClick={() => {
-//                 getWMLayerById(layer?.id)?.zoomToLayer();
-//                 getWMLayerById(layer?.id)?.parentMap?.draw();
-//               }}
-//             >
-//               <CenterFocusStrongIcon />
-//             </IconButton>
-//             <IconButton
-//               size="small"
-//               edge="end"
-//               color="inherit"
-//               aria-label="menu"
-//               onClick={() => {
-//                 const wmLayer = getWMLayerById(layer?.id);
-//                 if (wmLayer) {
-//                   wmLayer.enabled = !wmLayer.enabled;
-//                   update();
-//                 }
-//               }}
-//             >
-//               {getWMLayerById(layer?.id)?.enabled ? (
-//                 <VisibilityIcon />
-//               ) : (
-//                 <VisibilityOffIcon />
-//               )}
-//             </IconButton>
-//             <IconButton
-//               size="small"
-//               edge="end"
-//               color="inherit"
-//               aria-label="menu"
-//               onClick={() => {
-//                 removeLayer();
-//               }}
-//             >
-//               <CloseIcon />
-//             </IconButton>
-//           </Toolbar>
-//         </AppBar>
-//         <Grid container direction="column">
-//           <Grid item sx={{ p: 1 }} style={{ width: 'inherit' }}>
-//             <WMSLayerSelector
-//               layerName={layer?.name}
-//               layers={availableLayers}
-//               onSelectLayer={onSelectLayer}
-//             />
-//           </Grid>
-
-//           <Grid item sx={{ p: 1 }} style={{ width: 'inherit' }}>
-//             <WMSStyleSelector
-//               styleName={selectedStyleName}
-//               styles={styles}
-//               onSelectStyle={(styleName) => {
-//                 onSelectStyle(styleName);
-//               }}
-//             />
-//           </Grid>
-//           <Grid item sx={{ p: 1 }} style={{ width: 'inherit' }}>
-//             {getWMLayerById(layer?.id)?.dimensions.map((layerDimension) => {
-//               return (
-//                 <WMSDimensionSlider
-//                   key={layerDimension.name}
-//                   selectedDimensionValue={getDimensionValue(
-//                     layerDimension.name,
-//                   )}
-//                   layerId={layer?.id}
-//                   onSelectDimensionValue={(value) => {
-//                     setDimensionValue(layerDimension.name, value);
-//                   }}
-//                   dimensionName={layerDimension.name}
-//                 />
-//               );
-//             })}
-//           </Grid>
-//         </Grid>
-//       </Grid>
-//     </ThemeWrapper>
-//   );
-// };

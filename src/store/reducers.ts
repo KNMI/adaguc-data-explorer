@@ -11,7 +11,7 @@ const getReduxLayer = (
   const map = draftState.maps[mapId];
   if (!map || !map.layers[layerIndex]) {
     // eslint-disable-next-line no-console
-    console.error(`No layer ${layerIndex} found for mapId ${mapId}`);
+    console.error(`No layer with index ${layerIndex} found for mapId ${mapId}`);
     return null;
   }
   return map.layers[layerIndex];
@@ -208,7 +208,7 @@ export const reducers = {
     );
     const layer = layers.find((layeri) => layeri.name === name);
     if (layer) {
-      draftState.maps[mapId].layers.push({
+      draftState.maps[mapId].layers.unshift({
         name,
         serviceUrl,
         id,

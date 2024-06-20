@@ -5,11 +5,7 @@ import { MapView, MapViewLayer } from '@opengeoweb/webmap-react';
 import { useAppSelector } from '../store/store';
 import { selectors } from '../store/selectors';
 import { AdagucLayer, ViewerState } from '../store/types';
-import {
-  baseLayerWorldMap,
-  overLayer,
-  overlayLayer,
-} from '../utils/layerDefinitions';
+import { baseLayerWorldMap, overlayLayer } from '../utils/layerDefinitions';
 
 export interface ReduxMapViewComponentProps {
   mapId: string;
@@ -26,6 +22,9 @@ export const ReduxMapViewComponent = ({
   return (
     <MapView
       mapId={mapId}
+      onUpdateLayerInformation={() => {
+        update();
+      }}
       onWMJSMount={(mountedMapId) => {
         const m = getWMJSMapById(mountedMapId) as unknown as {
           shouldPrefetch: boolean;
@@ -51,7 +50,7 @@ export const ReduxMapViewComponent = ({
           />
         );
       })}
-      <MapViewLayer {...overlayLayer} type={LayerType.baseLayer} />
+      <MapViewLayer {...overlayLayer} type="baseLayer" />
     </MapView>
   );
 };
