@@ -14,6 +14,7 @@ const selectLayer = (
   wmsService: string,
 ): Promise<Layer> => {
   return new Promise((resolveLayer) => {
+    console.log('resolve');
     const wmsLayer = {
       service: wmsService,
       name: selectedLayer.name,

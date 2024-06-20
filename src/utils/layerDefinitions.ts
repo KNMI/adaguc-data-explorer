@@ -17,3 +17,12 @@ export const baseLayerWorldMap = {
   enabled: true,
   id: generateLayerId(),
 };
+
+export const overlayLayer = {
+  id: 'countryborder-airmet',
+  name: 'countryborders',
+  layerType: 'overLayer',
+  format: 'image/png',
+  enabled: true,
+  service: 'https://geoservices.knmi.nl/wms?DATASET=baselayers&',
+};
