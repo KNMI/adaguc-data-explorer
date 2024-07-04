@@ -69,6 +69,14 @@ export const getMapLayerById = createSelector(
   selectorMemoizationOptions,
 );
 
+export const isMapAnimating = createSelector(
+  [getMapById, (_, mapId: string) => mapId],
+  (map: AdagucMap): boolean | null => {
+    return map?.isAnimating;
+  },
+  selectorMemoizationOptions,
+);
+
 const getServiceForLayer = createSelector(
   [
     (state: ViewerState): AdagucMapsState => state?.viewer,
@@ -115,5 +123,6 @@ const selectors = {
   getMapLayerById,
   getMapLayers,
   getStyleListForLayer,
+  isMapAnimating,
 };
 export { selectors };

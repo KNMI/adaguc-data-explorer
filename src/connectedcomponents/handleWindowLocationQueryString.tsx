@@ -1,4 +1,4 @@
-import { WMBBOX, getWMJSMapById } from '@opengeoweb/webmap';
+import { URLEncode, WMBBOX, getWMJSMapById } from '@opengeoweb/webmap';
 import { AppThunkDispatch, actions } from '../store/store';
 import { thunks } from '../store/thunks';
 
@@ -6,7 +6,7 @@ const addLayers = async (
   layerList: {
     name: string;
     service: string;
-    enabled: string;
+    enabled: boolean;
     style: string;
     opacity: string;
     format: string;
@@ -24,6 +24,8 @@ const addLayers = async (
           mapId,
           serviceUrl: layer.service,
           name: layer.name,
+          enabled: layer.enabled,
+          opacity: layer.opacity,
         }),
       )
         .unwrap()
@@ -42,9 +44,7 @@ export const handleWindowLocationQueryString = (
   dispatch: AppThunkDispatch,
 ) => {
   const lowerCaseUrlParams = new URLSearchParams(window.location.search);
-  lowerCaseUrlParams.forEach((item, key) => {
-    console.log(key, item);
-  });
+
   const srs = lowerCaseUrlParams.get('srs');
   const bbox = lowerCaseUrlParams.get('bbox');
   if (srs && bbox) {
@@ -61,7 +61,7 @@ export const handleWindowLocationQueryString = (
       if (layerProps && layerProps.length === 6) {
         const layerName = layerProps[0];
         const layerFormat = layerProps[1];
-        const layerEnabled = layerProps[2];
+        const layerEnabled = layerProps[2] !== 'false';
         const layerStyle = layerProps[3];
         const layerOpacity = layerProps[4];
         const layerServiceIndex = parseInt(`${layerProps[5]}`, 10);
@@ -102,4 +102,40 @@ export const handleWindowLocationQueryString = (
       }
     });
   }
+};
+
+export const makePermaLink = (mapId: string): string => {
+  const webmap = getWMJSMapById(mapId);
+  if (!webmap) return '';
+  const currentOrigin = window.location.origin;
+  const { srs } = webmap.getProjection();
+  const bbox = webmap.getBBOX();
+  const projectionLink = `srs=${URLEncode(srs)}&bbox=${bbox.left},${bbox.bottom},${bbox.right},${bbox.top}`;
+  const layers = webmap.getLayers();
+  const serviceMap = new Set<string>();
+  layers.forEach((layer) => {
+    serviceMap.add(layer.service);
+  });
+  const serviceLink = `service=${URLEncode(Array.from(serviceMap).join(','))}`;
+  const layersLink = layers
+    .map((layer) => {
+      const layerName = layer.name;
+      const layerFormat = layer.format;
+      const layerEnabled = layer.enabled ? 'true' : 'false';
+      const layerStyle = layer.getStyle();
+      const layerOpacity = layer.opacity;
+      const layerServiceIndex = Array.from(serviceMap).findIndex(
+        (item) => item === layer.service,
+      );
+      return `${URLEncode(layerName)}$${URLEncode(layerFormat)}$${layerEnabled}$${URLEncode(layerStyle)}$${layerOpacity}$${layerServiceIndex}`;
+    })
+    .join(',');
+
+  const dimsLink = webmap
+    .getDimensionList()
+    .map((dim) => {
+      return `${dim.name}$${dim.currentValue}`;
+    })
+    .join(',');
+  return `${currentOrigin}?${projectionLink}&${serviceLink}&layer=${layersLink}&selected=0&dims=${dimsLink}`;
 };

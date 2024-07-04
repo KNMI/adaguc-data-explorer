@@ -20,7 +20,15 @@ export const SortableLayerList = ({
     selectors.getMapLayerIds(state, mapId),
   );
   return (
-    <div style={{ overflowY: 'scroll', width: 'inherit', height: '100%' }}>
+    <div
+      style={{
+        overflowY: 'scroll',
+        width: 'inherit',
+        height: '100%',
+        background:
+          'repeating-linear-gradient(-35deg,#D3CDE8,#D3CDE8 8px,#D1CBE6 8px, #D1CBE6 16px)',
+      }}
+    >
       <ReactSortable
         setList={(newList) => {
           if (layersInMap.join() === newList.map((it) => it.id).join()) {

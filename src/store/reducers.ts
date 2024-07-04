@@ -1,4 +1,9 @@
-import { WMJSDimension, WMLayer, getWMLayerById } from '@opengeoweb/webmap';
+import {
+  WMJSDimension,
+  WMLayer,
+  getWMJSMapById,
+  getWMLayerById,
+} from '@opengeoweb/webmap';
 import { AdagucLayer, AdagucMapsState, AdagucService } from './types';
 import { AddLayerInterfaceFulFilled } from './thunks';
 import { selectors } from './selectors';
@@ -15,6 +20,26 @@ const getReduxLayer = (
     return null;
   }
   return map.layers[layerIndex];
+};
+
+const setDimensionForReduxLayer = (
+  reduxLayer: AdagucLayer,
+  dimensionName: string,
+  dimensionValue: string,
+) => {
+  if (reduxLayer) {
+    const reduxDim = reduxLayer.dimensions.find(
+      (dim) => dim.name === dimensionName,
+    );
+    if (reduxDim) {
+      reduxDim.currentValue = dimensionValue;
+    } else {
+      reduxLayer.dimensions.push({
+        name: dimensionName,
+        currentValue: dimensionValue,
+      });
+    }
+  }
 };
 
 const getServiceByServiceUrl = (
@@ -35,7 +60,7 @@ export const reducers = {
   ): AdagucMapsState => {
     const { mapId } = action.payload;
     if (!draftState.maps[mapId]) {
-      draftState.maps[mapId] = { layers: [] };
+      draftState.maps[mapId] = { layers: [], isAnimating: false };
     }
     return draftState;
   },
@@ -56,6 +81,39 @@ export const reducers = {
     );
     draftState.maps[mapId].layers = newLayerListOrder;
   },
+  layerToggleAnimation: (
+    draftState: AdagucMapsState,
+    action: { payload: { mapId: string; layerIndex: number } },
+  ): AdagucMapsState => {
+    const { mapId, layerIndex } = action.payload;
+    if (!draftState.maps[mapId]?.layers) {
+      return;
+    }
+    const webmap = getWMJSMapById(mapId);
+    if (webmap.isAnimating) {
+      webmap.stopAnimating();
+      draftState.maps[mapId].isAnimating = false;
+    } else {
+      draftState.maps[mapId].isAnimating = true;
+      const layerId = draftState.maps[mapId].layers[layerIndex].id;
+      const timeDim = getWMLayerById(layerId).getDimension('time');
+      if (timeDim) {
+        const currentIndex = timeDim.getIndexForValue(timeDim.currentValue);
+        const numSteps = timeDim.size();
+        const steps = [];
+        for (let j = 0; j < 12; j += 1) {
+          const index = currentIndex - 11 + j;
+          if (index >= 0 && index < numSteps) {
+            steps.push({
+              name: 'time',
+              value: timeDim.getValueForIndex(index),
+            });
+          }
+        }
+        webmap.draw(steps);
+      }
+    }
+  },
   removeLayer: (
     draftState: AdagucMapsState,
     action: { payload: { mapId: string; layerIndex: number } },
@@ -64,6 +122,7 @@ export const reducers = {
     if (!draftState.maps[mapId]?.layers) {
       return;
     }
+
     draftState.maps[mapId].layers.splice(layerIndex, 1);
   },
   removeAllLayers: (
@@ -113,6 +172,32 @@ export const reducers = {
       payload: { mapId, layerIndex, styleName: newStyle },
     });
   },
+  updateDims: (
+    draftState: AdagucMapsState,
+    action: {
+      payload: {
+        mapId: string;
+      };
+    },
+  ): AdagucMapsState => {
+    const { mapId } = action.payload;
+    const webmap = getWMJSMapById(mapId);
+    const mapLayers = webmap.getLayers();
+    mapLayers.forEach((mapLayer, layerIndex) => {
+      const draftLayer = getReduxLayer(draftState, mapId, layerIndex);
+      if (draftLayer) {
+        mapLayer.dimensions.forEach((layerDim) => {
+          setDimensionForReduxLayer(
+            draftLayer,
+            layerDim.name,
+            layerDim.currentValue,
+          );
+        });
+      }
+    });
+
+    return draftState;
+  },
   changeLayerDimension: (
     draftState: AdagucMapsState,
     action: {
@@ -129,6 +214,9 @@ export const reducers = {
     if (!draftLayer) {
       return;
     }
+    const webmap = getWMJSMapById(mapId);
+    webmap.stopAnimating();
+    draftState.maps[mapId].isAnimating = false;
 
     const updateLayerDimsInMap = (wmLayer: WMLayer) => {
       const mapLayers = wmLayer.parentMap.getLayers();
@@ -146,19 +234,11 @@ export const reducers = {
             if (layerDim.linked === true && layerDim.name === mapDim.name) {
               layerDim.setClosestValue(mapDim.currentValue, false);
               const reduxLayer = draftState.maps[mapId].layers[i];
-              if (reduxLayer) {
-                const reduxDim = reduxLayer.dimensions.find(
-                  (dim) => dim.name === layerDim.name,
-                );
-                if (reduxDim) {
-                  reduxDim.currentValue = layerDim.currentValue;
-                } else {
-                  draftLayer.dimensions.push({
-                    name: layerDim.name,
-                    currentValue: layerDim.currentValue,
-                  });
-                }
-              }
+              setDimensionForReduxLayer(
+                reduxLayer,
+                layerDim.name,
+                layerDim.currentValue,
+              );
             }
           });
         });
@@ -201,7 +281,16 @@ export const reducers = {
     action: { payload: AddLayerInterfaceFulFilled },
   ): void => {
     reducers.registerMap(draftState, action);
-    const { serviceUrl, name, mapId, id, dimensions } = action.payload;
+    const {
+      serviceUrl,
+      name,
+      mapId,
+      id,
+      dimensions,
+      enabled,
+      styleName,
+      opacity,
+    } = action.payload;
     const layers = selectors.getAvailableLayers(
       { viewer: draftState },
       serviceUrl,
@@ -210,10 +299,12 @@ export const reducers = {
     if (layer) {
       draftState.maps[mapId].layers.unshift({
         name,
+        enabled: !!enabled,
         serviceUrl,
         id,
-        style: layer.styles[0]?.name,
+        style: styleName || layer.styles[0]?.name,
         dimensions,
+        opacity: opacity || 1,
       });
     }
   },

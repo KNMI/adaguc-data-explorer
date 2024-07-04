@@ -47,6 +47,10 @@ export const ReduxLayerComponent = ({
     selectors.getStyleListForLayer(state, layer),
   );
 
+  const isAnimating = useAppSelector((state: ViewerState): boolean =>
+    selectors.isMapAnimating(state, mapId),
+  );
+
   // const availableLayers = useAppSelector((state: ViewerState): LayerProps[] =>
   //   selectors.getAvailableLayers(state, layer?.serviceUrl),
   // );
@@ -74,12 +78,22 @@ export const ReduxLayerComponent = ({
     );
   };
 
+  const layerToggleAnimation = () => {
+    dispatch(
+      actions.layerToggleAnimation({
+        mapId,
+        layerIndex,
+      }),
+    );
+  };
+
   return (
     <LayerComponent
       layer={layer}
       layerIndex={layerIndex}
       key={layer?.id}
       serviceUrl={layer?.serviceUrl}
+      isAnimating={isAnimating}
       onSelectLayer={(_layer) => {
         selectLayer(_layer);
       }}
@@ -105,6 +119,9 @@ export const ReduxLayerComponent = ({
       }}
       removeLayer={() => {
         removeLayer();
+      }}
+      layerToggleAnimation={() => {
+        layerToggleAnimation();
       }}
     />
   );

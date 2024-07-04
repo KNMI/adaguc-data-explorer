@@ -10,6 +10,8 @@ export interface AdagucLayer {
   id: string;
   style: string;
   dimensions: AdagucLayerDimension[];
+  enabled: boolean;
+  opacity: number;
 }
 
 export interface AdagucService {
@@ -19,6 +21,7 @@ export interface AdagucService {
 }
 
 export interface AdagucMap {
+  isAnimating: boolean;
   layers: AdagucLayer[];
 }
 export interface AdagucMapsState {

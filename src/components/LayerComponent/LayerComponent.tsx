@@ -9,6 +9,11 @@ import {
 import { Card, CardContent, CardHeader, Grid, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import PlayIcon from '@mui/icons-material/PlayArrow';
+import StopIcon from '@mui/icons-material/Stop';
+import SettingsIcon from '@mui/icons-material/Settings';
+import DetailsIcon from '@mui/icons-material/Info';
+
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
 import { debounce } from 'lodash';
@@ -23,11 +28,13 @@ export interface LayerComponentProps {
   layer: AdagucLayer;
   selectedStyleName: string;
   styles: Style[];
+  isAnimating: boolean;
   onSelectLayer: (layerName: string) => void;
   onSelectStyle: (style: string) => void;
   getDimensionValue: (dimensionName: string) => string;
   setDimensionValue: (dimensionName: string, dimensionValue: string) => void;
   removeLayer: () => void;
+  layerToggleAnimation: () => void;
   update: () => void;
 }
 export const LayerComponent = ({
@@ -37,9 +44,11 @@ export const LayerComponent = ({
   onSelectStyle,
   selectedStyleName,
   styles,
+  isAnimating,
   getDimensionValue,
   setDimensionValue,
   removeLayer,
+  layerToggleAnimation,
   update: updateParent,
   layerIndex,
 }: LayerComponentProps): React.ReactElement<LayerComponentProps> => {
@@ -65,54 +74,28 @@ export const LayerComponent = ({
   debouncedHandleChange(wmLayer);
 
   const cardActions = (
-    <>
-      <IconButton
-        size="small"
-        edge="end"
-        color="inherit"
-        aria-label="menu"
-        onClick={() => {
-          getWMLayerById(layer?.id)?.zoomToLayer();
-          getWMLayerById(layer?.id)?.parentMap?.draw();
-        }}
-      >
-        <CenterFocusStrongIcon />
-      </IconButton>
-      <IconButton
-        size="small"
-        edge="end"
-        color="inherit"
-        aria-label="menu"
-        onClick={() => {
-          // const wmLayer = getWMLayerById(layer?.id);
-          if (wmLayer) {
-            wmLayer.enabled = !wmLayer.enabled;
-            update();
-          }
-        }}
-      >
-        {getWMLayerById(layer?.id)?.enabled ? (
-          <VisibilityIcon />
-        ) : (
-          <VisibilityOffIcon />
-        )}
-      </IconButton>
-      <IconButton
-        size="small"
-        edge="end"
-        color="inherit"
-        aria-label="menu"
-        onClick={() => {
-          removeLayer();
-        }}
-      >
-        <CloseIcon />
-      </IconButton>
-    </>
+    <IconButton
+      size="small"
+      edge="end"
+      color="inherit"
+      aria-label="menu"
+      onClick={() => {
+        removeLayer();
+      }}
+    >
+      <CloseIcon />
+    </IconButton>
   );
 
   return (
-    <Card style={{ padding: '0px', marginTop: '0px', marginBottom: '5px' }}>
+    <Card
+      style={{
+        padding: '0px',
+        margin: 0,
+        marginBottom: '10px',
+        background: '#E8E8EF',
+      }}
+    >
       <CardHeader
         title={cardTitle}
         subheader={cardSubTitle}
@@ -134,10 +117,14 @@ export const LayerComponent = ({
           width: '100%',
           noWrap: true,
         }}
-        style={{ borderBottom: '2px solid #888', height: '70px' }}
+        style={{ padding: '5px 5px 20px 5px', background: '#BAD0EF' }}
       />
-      <CardContent>
-        <Grid container direction="row">
+      <CardContent style={{ padding: '0px', margin: '0px' }}>
+        <Grid
+          container
+          direction="row"
+          style={{ padding: '2px', margin: 0, marginTop: '5px' }}
+        >
           <Grid item xs={10}>
             <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
               <WMSLayerSelector
@@ -159,7 +146,11 @@ export const LayerComponent = ({
                 }}
               />
             </Grid>
-            <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
+            <Grid
+              item
+              sx={{ paddingBottom: 1 }}
+              style={{ width: 'inherit', background: 'white' }}
+            >
               {getWMLayerById(layer?.id)?.dimensions.map((layerDimension) => {
                 return (
                   <WMSDimensionSlider
@@ -183,11 +174,79 @@ export const LayerComponent = ({
             xs={2}
             style={{
               height: 'inherit',
-              maxHeight: '180px',
+
               overflow: 'hidden',
             }}
           >
             <img alt="legend" width="100%" src={legendGraphicUrl} />
+          </Grid>
+        </Grid>
+        <Grid style={{ background: '#BAD0EF', height: '34px' }}>
+          <Grid style={{ float: 'right' }}>
+            <IconButton
+              size="small"
+              edge="end"
+              color="inherit"
+              aria-label="menu"
+              onClick={() => {
+                alert('tbi');
+              }}
+            >
+              <DetailsIcon />
+            </IconButton>
+            <IconButton
+              size="small"
+              edge="end"
+              color="inherit"
+              aria-label="menu"
+              onClick={() => {
+                alert('tbi');
+              }}
+            >
+              <SettingsIcon />
+            </IconButton>
+            <IconButton
+              size="small"
+              edge="end"
+              color="inherit"
+              aria-label="menu"
+              onClick={() => {
+                // const wmLayer = getWMLayerById(layer?.id);
+                if (wmLayer) {
+                  wmLayer.enabled = !wmLayer.enabled;
+                  update();
+                }
+              }}
+            >
+              {getWMLayerById(layer?.id)?.enabled ? (
+                <VisibilityIcon />
+              ) : (
+                <VisibilityOffIcon />
+              )}
+            </IconButton>
+            <IconButton
+              size="small"
+              edge="end"
+              color="inherit"
+              aria-label="menu"
+              onClick={() => {
+                layerToggleAnimation();
+              }}
+            >
+              {isAnimating ? <StopIcon /> : <PlayIcon />}
+            </IconButton>
+            <IconButton
+              size="small"
+              edge="end"
+              color="inherit"
+              aria-label="menu"
+              onClick={() => {
+                getWMLayerById(layer?.id)?.zoomToLayer();
+                getWMLayerById(layer?.id)?.parentMap?.draw();
+              }}
+            >
+              <CenterFocusStrongIcon />
+            </IconButton>
           </Grid>
         </Grid>
       </CardContent>

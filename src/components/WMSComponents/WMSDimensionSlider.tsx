@@ -2,11 +2,21 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
 import { Box, IconButton, Slider, Typography } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { getWMLayerById } from '@opengeoweb/webmap';
 import Checkbox from '@mui/material/Checkbox';
 import { debounce } from 'lodash';
+
+const CustomSlider = styled(Slider)(() => ({
+  '& .MuiSlider-thumb': {
+    transition: 'none',
+  },
+  '& .MuiSlider-track': {
+    transition: 'none',
+  },
+}));
 
 interface WMSDimensionSliderProps {
   selectedDimensionValue: string;
@@ -60,21 +70,22 @@ const WMSDimensionSlider = ({
   // const dimIndex = layerDim.getIndexForValue(selectedDimValue);
 
   return (
-    <Box sx={{ height: '100%', margin: '0' }}>
+    <Box sx={{ height: '100%', margin: '0', padding: 0 }}>
       <Typography fontSize="12px">
         Dimension {layerDim?.name} in {layerDim?.units} - ({stateDimIndex}-
         {layerDim.size()})
       </Typography>
       <div style={{ display: 'flex' }}>
         <Checkbox
+          style={{ padding: 0 }}
           defaultChecked={layerDim.linked}
           onChange={(e, checked) => {
             layerDim.linked = checked;
           }}
         />
-        <Slider
+        <CustomSlider
           value={stateDimIndex}
-          style={{ margin: '6px 0 0 0' }}
+          style={{ margin: '10px 0 0 5px', padding: 0 }}
           onChange={handleChange}
           size="small"
           min={0}
@@ -82,7 +93,7 @@ const WMSDimensionSlider = ({
           orientation="horizontal"
         />
         <IconButton
-          style={{ marginLeft: '20px', fontSize: '12px' }}
+          style={{ marginLeft: '10px', fontSize: '12px' }}
           size="small"
           edge="end"
           color="inherit"
