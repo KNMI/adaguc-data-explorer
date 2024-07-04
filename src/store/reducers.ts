@@ -153,6 +153,32 @@ export const reducers = {
 
     return draftState;
   },
+  layerChangeOpacity: (
+    draftState: AdagucMapsState,
+    action: {
+      payload: { mapId: string; layerIndex: number; opacity: number };
+    },
+  ): AdagucMapsState => {
+    const { mapId, layerIndex, opacity } = action.payload;
+    const draftLayer = getReduxLayer(draftState, mapId, layerIndex);
+    if (draftLayer) {
+      draftLayer.opacity = opacity;
+    }
+    return draftState;
+  },
+  layerChangeEnabled: (
+    draftState: AdagucMapsState,
+    action: {
+      payload: { mapId: string; layerIndex: number; enabled: boolean };
+    },
+  ): AdagucMapsState => {
+    const { mapId, layerIndex, enabled } = action.payload;
+    const draftLayer = getReduxLayer(draftState, mapId, layerIndex);
+    if (draftLayer) {
+      draftLayer.enabled = enabled;
+    }
+    return draftState;
+  },
   changeLayerName: (
     draftState: AdagucMapsState,
     action: {
@@ -299,7 +325,7 @@ export const reducers = {
     if (layer) {
       draftState.maps[mapId].layers.unshift({
         name,
-        enabled: !!enabled,
+        enabled: enabled || true,
         serviceUrl,
         id,
         style: styleName || layer.styles[0]?.name,

@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { Dialog, DialogContent, DialogTitle, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+
 import { makePermaLink } from './handleWindowLocationQueryString';
+import { CopyToClipBoard } from './CopyToClipBoard';
 
 interface AdagucCreatePermalinkDialogProps {
   isDialogOpen: boolean;
@@ -12,6 +14,7 @@ const AdagucCreatePermalinkDialog = ({
   onDialogOpen,
 }: AdagucCreatePermalinkDialogProps): React.ReactElement => {
   const link = makePermaLink('map1');
+
   return (
     <Dialog
       open={isDialogOpen}
@@ -37,6 +40,7 @@ const AdagucCreatePermalinkDialog = ({
         <CloseIcon />
       </IconButton>
       <DialogContent>
+        <CopyToClipBoard info="link" text={link} />
         <a target="_blank" rel="noreferrer" href={link}>
           {link}
         </a>

@@ -6,13 +6,22 @@ import {
   getLegendGraphicURLForLayer,
   getWMLayerById,
 } from '@opengeoweb/webmap';
-import { Card, CardContent, CardHeader, Grid, IconButton } from '@mui/material';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  Grid,
+  IconButton,
+  Slider,
+  Tooltip,
+} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PlayIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DetailsIcon from '@mui/icons-material/Info';
+import DuplicateIcon from '@mui/icons-material/FileCopy';
 
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
@@ -31,6 +40,9 @@ export interface LayerComponentProps {
   isAnimating: boolean;
   onSelectLayer: (layerName: string) => void;
   onSelectStyle: (style: string) => void;
+  onChangeLayerEnabled: (enabled: boolean) => void;
+  onChangeOpacity: (opacity: number) => void;
+  onDuplicate: () => void;
   getDimensionValue: (dimensionName: string) => string;
   setDimensionValue: (dimensionName: string, dimensionValue: string) => void;
   removeLayer: () => void;
@@ -42,6 +54,9 @@ export const LayerComponent = ({
   layer,
   onSelectLayer,
   onSelectStyle,
+  onChangeLayerEnabled,
+  onChangeOpacity,
+  onDuplicate,
   selectedStyleName,
   styles,
   isAnimating,
@@ -74,17 +89,19 @@ export const LayerComponent = ({
   debouncedHandleChange(wmLayer);
 
   const cardActions = (
-    <IconButton
-      size="small"
-      edge="end"
-      color="inherit"
-      aria-label="menu"
-      onClick={() => {
-        removeLayer();
-      }}
-    >
-      <CloseIcon />
-    </IconButton>
+    <Tooltip title="Remove this layer">
+      <IconButton
+        size="small"
+        edge="end"
+        color="inherit"
+        aria-label="menu"
+        onClick={() => {
+          removeLayer();
+        }}
+      >
+        <CloseIcon />
+      </IconButton>
+    </Tooltip>
   );
 
   return (
@@ -183,70 +200,116 @@ export const LayerComponent = ({
         </Grid>
         <Grid style={{ background: '#BAD0EF', height: '34px' }}>
           <Grid style={{ float: 'right' }}>
-            <IconButton
-              size="small"
-              edge="end"
-              color="inherit"
-              aria-label="menu"
-              onClick={() => {
-                alert('tbi');
-              }}
-            >
-              <DetailsIcon />
-            </IconButton>
-            <IconButton
-              size="small"
-              edge="end"
-              color="inherit"
-              aria-label="menu"
-              onClick={() => {
-                alert('tbi');
-              }}
-            >
-              <SettingsIcon />
-            </IconButton>
-            <IconButton
-              size="small"
-              edge="end"
-              color="inherit"
-              aria-label="menu"
-              onClick={() => {
-                // const wmLayer = getWMLayerById(layer?.id);
-                if (wmLayer) {
-                  wmLayer.enabled = !wmLayer.enabled;
-                  update();
-                }
-              }}
-            >
-              {getWMLayerById(layer?.id)?.enabled ? (
-                <VisibilityIcon />
-              ) : (
-                <VisibilityOffIcon />
-              )}
-            </IconButton>
-            <IconButton
-              size="small"
-              edge="end"
-              color="inherit"
-              aria-label="menu"
-              onClick={() => {
-                layerToggleAnimation();
-              }}
-            >
-              {isAnimating ? <StopIcon /> : <PlayIcon />}
-            </IconButton>
-            <IconButton
-              size="small"
-              edge="end"
-              color="inherit"
-              aria-label="menu"
-              onClick={() => {
-                getWMLayerById(layer?.id)?.zoomToLayer();
-                getWMLayerById(layer?.id)?.parentMap?.draw();
-              }}
-            >
-              <CenterFocusStrongIcon />
-            </IconButton>
+            <Tooltip title="Change opacity of this layer">
+              <Slider
+                value={(wmLayer?.opacity || 1) * 100}
+                style={{
+                  position: 'absolute',
+                  width: '70px',
+                  left: 0,
+                  margin: '2px',
+                }}
+                onChange={(e, value: number) => {
+                  if (wmLayer) {
+                    wmLayer.opacity = value / 100;
+                    onChangeOpacity(wmLayer.opacity);
+                    update();
+                  }
+                }}
+                size="small"
+                min={0}
+                max={100}
+                orientation="horizontal"
+              />
+            </Tooltip>
+            <Tooltip title="Duplicate">
+              <IconButton
+                size="small"
+                edge="end"
+                color="inherit"
+                aria-label="menu"
+                onClick={() => {
+                  onDuplicate();
+                }}
+              >
+                <DuplicateIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Layer details">
+              <IconButton
+                size="small"
+                edge="end"
+                color="inherit"
+                aria-label="menu"
+                onClick={() => {
+                  alert('tbi');
+                }}
+              >
+                <DetailsIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Layer settings">
+              <IconButton
+                size="small"
+                edge="end"
+                color="inherit"
+                aria-label="menu"
+                onClick={() => {
+                  alert('tbi');
+                }}
+              >
+                <SettingsIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Enable/disable layer">
+              <IconButton
+                size="small"
+                edge="end"
+                color="inherit"
+                aria-label="menu"
+                onClick={() => {
+                  // const wmLayer = getWMLayerById(layer?.id);
+                  if (wmLayer) {
+                    wmLayer.enabled = !wmLayer.enabled;
+                    onChangeLayerEnabled(wmLayer.enabled);
+                    update();
+                  }
+                }}
+              >
+                {getWMLayerById(layer?.id)?.enabled ? (
+                  <VisibilityIcon />
+                ) : (
+                  <VisibilityOffIcon />
+                )}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Play animation based on this layer">
+              <IconButton
+                size="small"
+                edge="end"
+                color="inherit"
+                aria-label="menu"
+                onClick={() => {
+                  layerToggleAnimation();
+                }}
+              >
+                {isAnimating ? <StopIcon /> : <PlayIcon />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Zoom to extent of this layer">
+              <IconButton
+                size="small"
+                edge="end"
+                color="inherit"
+                aria-label="menu"
+                onClick={() => {
+                  getWMLayerById(layer?.id)?.zoomToLayer();
+                  getWMLayerById(layer?.id)?.parentMap?.draw();
+                }}
+              >
+                <CenterFocusStrongIcon />
+              </IconButton>
+            </Tooltip>
           </Grid>
         </Grid>
       </CardContent>

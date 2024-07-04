@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Style, getWMJSMapById } from '@opengeoweb/webmap';
+import { Style, generateLayerId, getWMJSMapById } from '@opengeoweb/webmap';
 import { actions, useAppDispatch, useAppSelector } from '../store/store';
 import { selectors } from '../store/selectors';
 import { AdagucLayer, ViewerState } from '../store/types';
@@ -24,6 +24,16 @@ export const ReduxLayerComponent = ({
         mapId,
         layerIndex,
         layerName: layerNameToChange,
+      }),
+    );
+  };
+
+  const onDuplicateLayer = (layer: AdagucLayer) => {
+    dispatch(
+      actions.fullFillAddLayer({
+        mapId,
+        ...layer,
+        id: generateLayerId(),
       }),
     );
   };
@@ -87,6 +97,25 @@ export const ReduxLayerComponent = ({
     );
   };
 
+  const changeLayerOpacity = (opacity: number) => {
+    dispatch(
+      actions.layerChangeOpacity({
+        mapId,
+        layerIndex,
+        opacity,
+      }),
+    );
+  };
+
+  const changeLayerEnabled = (enabled: boolean) => {
+    dispatch(
+      actions.layerChangeEnabled({
+        mapId,
+        layerIndex,
+        enabled,
+      }),
+    );
+  };
   return (
     <LayerComponent
       layer={layer}
@@ -94,8 +123,17 @@ export const ReduxLayerComponent = ({
       key={layer?.id}
       serviceUrl={layer?.serviceUrl}
       isAnimating={isAnimating}
+      onDuplicate={() => {
+        onDuplicateLayer(layer);
+      }}
       onSelectLayer={(_layer) => {
         selectLayer(_layer);
+      }}
+      onChangeOpacity={(opacity) => {
+        changeLayerOpacity(opacity);
+      }}
+      onChangeLayerEnabled={(enabled) => {
+        changeLayerEnabled(enabled);
       }}
       getDimensionValue={(dimensionName: string): string => {
         const foundDim = layer?.dimensions?.find(

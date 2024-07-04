@@ -65,7 +65,7 @@ export const addLayer = createAsyncThunk(
     }
     return {
       name: layerName,
-      enabled: !!enabled,
+      enabled: enabled || true,
       opacity: opacity || 1,
       styleName,
       serviceUrl,
