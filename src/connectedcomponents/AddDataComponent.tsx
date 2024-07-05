@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { ThemeWrapper } from '@opengeoweb/theme';
 import 'react-mosaic-component/react-mosaic-component.css';
-import '../../stories/story.css';
+import '../assets/styles.css';
 
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';

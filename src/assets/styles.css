@@ -29,6 +29,7 @@
   margin:0px;
   overflow-y: scroll;
   height:100%;
+  font-size: 12px;
 }
 
 .autowms_app_fileitem{
@@ -60,13 +61,13 @@
   padding:8px 1px 12px 8px;
   background-color: #FAFAFF;
   color:#444;
-  max-height:120px;
+  max-height:150px;
   overflow-y:scroll;
 }
 
 .autowms_app_layeritem{
   display:block;
-  margin:1px 1px 1px 8px;
+  margin:1px 1px 3px 1px;
   padding:8px 1px 12px 8px;
   background-color: #e8e1fF;
   cursor:pointer;
@@ -171,4 +172,11 @@
 
 .autowms_app_opendaplinks a {
   padding:3px;
+}
+
+.getfeatureinfo_result {
+  padding:5px;
+  font-size: 12px;
+  margin:5px 0;
+  background: white;
 }

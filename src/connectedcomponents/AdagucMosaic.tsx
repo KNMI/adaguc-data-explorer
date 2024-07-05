@@ -3,18 +3,32 @@ import { Mosaic } from 'react-mosaic-component';
 
 export interface AdagucMosaicProps {
   mosaicItems: { [viewId: string]: JSX.Element };
+  collapseAutoWMS: boolean;
 }
 export const AdagucMosaic = ({
   mosaicItems,
+  collapseAutoWMS,
 }: AdagucMosaicProps): React.ReactElement<AdagucMosaicProps> => {
-  const screenWidth = window.screen.width;
+  const screenWidth = Math.max(
+    document.documentElement.clientWidth || 0,
+    window.innerWidth || 0,
+  );
 
-  const leftPanelWidthPercentage = (350 / screenWidth) * 100;
+  const layerPanelWidth = 300;
+  const rightPanelWidth = 400;
+
+  const leftPanelWidthPercentage = (layerPanelWidth / screenWidth) * 100;
+  const autoWMSPanelWidthPercentage =
+    100 - (rightPanelWidth / (screenWidth - layerPanelWidth)) * 100;
+  const autoWMSPanelWidthPercentageCollapsed =
+    100 - (30 / (screenWidth - layerPanelWidth)) * 100;
 
   return React.useMemo(() => {
     return (
       <Mosaic<string>
-        renderTile={(id) => mosaicItems[id]}
+        renderTile={(id) => {
+          return mosaicItems[id];
+        }}
         initialValue={{
           direction: 'column',
           first: 'a',
@@ -25,7 +39,9 @@ export const AdagucMosaic = ({
               direction: 'row',
               first: 'c',
               second: 'd',
-              splitPercentage: 70,
+              splitPercentage: collapseAutoWMS
+                ? autoWMSPanelWidthPercentage
+                : autoWMSPanelWidthPercentageCollapsed,
             },
             splitPercentage: leftPanelWidthPercentage,
           },
@@ -33,5 +49,5 @@ export const AdagucMosaic = ({
         }}
       />
     );
-  }, []);
+  }, [collapseAutoWMS]);
 };

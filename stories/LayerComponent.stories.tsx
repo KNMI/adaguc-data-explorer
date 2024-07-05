@@ -1,7 +1,7 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
 import 'react-mosaic-component/react-mosaic-component.css';
-import './story.css';
+import '../assets/styles.css';
 import { LayerComponent } from '../src/components/LayerComponent/LayerComponent';
 import useLayerFromService from '../src/utils/useLayerFromService';
 

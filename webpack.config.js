@@ -4,14 +4,14 @@ const HtmlWebPackPlugin = require('html-webpack-plugin');
 
 module.exports = {
   entry: './src/application/index.tsx',
-  cache: false,
+  cache: { type: 'memory' },
   mode: 'development',
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'adaguc-data-explorer.js',
     hashFunction: 'sha256',
   },
-  devtool: 'source-map',
+  devtool: 'eval-cheap-module-source-map',
   resolve: {
     extensions: ['.js', '.ts', '.tsx'],
     fallback: {
@@ -36,15 +36,15 @@ module.exports = {
         exclude: /(node_modules|dist)/,
         use: ['babel-loader'],
       },
-      {
-        test: /\.html$/,
-        use: [
-          {
-            loader: 'html-loader',
-            options: { minimize: true },
-          },
-        ],
-      },
+      // {
+      //   test: /\.html$/,
+      //   use: [
+      //     {
+      //       loader: 'html-loader',
+      //       options: { minimize: false },
+      //     },
+      //   ],
+      // },
     ],
   },
   plugins: [
