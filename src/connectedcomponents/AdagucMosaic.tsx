@@ -8,7 +8,6 @@ export const AdagucMosaic = ({
   mosaicItems,
 }: AdagucMosaicProps): React.ReactElement<AdagucMosaicProps> => {
   const screenWidth = window.screen.width;
-  const layerListWidth = 300;
 
   const leftPanelWidthPercentage = (350 / screenWidth) * 100;
 
@@ -26,7 +25,7 @@ export const AdagucMosaic = ({
               direction: 'row',
               first: 'c',
               second: 'd',
-              splitPercentage: 99,
+              splitPercentage: 70,
             },
             splitPercentage: leftPanelWidthPercentage,
           },

@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-floating-promises */
 import * as React from 'react';
 import { ThemeWrapper } from '@opengeoweb/theme';
+import { Button } from '@mui/material';
 import { actions, useAppDispatch } from '../store/store';
 import { ReduxMapViewComponent } from './ReduxMapViewComponent';
 import 'react-mosaic-component/react-mosaic-component.css';
@@ -10,6 +11,8 @@ import { SortableLayerList } from './SortableLayerList';
 import AdagucAppBar from './AdagucAppBar';
 import { handleWindowLocationQueryString } from './handleWindowLocationQueryString';
 import { AdagucMosaic } from './AdagucMosaic';
+import AutoWMS from './AutoWMS';
+import { thunks } from '../store/thunks';
 
 const ReduxMap = (): React.ReactElement => {
   const dispatch = useAppDispatch();
@@ -38,7 +41,21 @@ const ReduxMap = (): React.ReactElement => {
         <ReduxMapViewComponent mapId={mapId} update={update} />
       </div>
     ),
-    d: <div>Right Window (e.g. autoWMS)</div>,
+    d: (
+      <div>
+        <AutoWMS
+          addLayer={(service: string, name: string): void => {
+            dispatch(
+              thunks.addLayer({
+                serviceUrl: service,
+                name,
+                mapId,
+              }),
+            );
+          }}
+        />
+      </div>
+    ),
   };
 
   return (

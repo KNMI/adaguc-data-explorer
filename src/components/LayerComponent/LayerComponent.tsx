@@ -19,8 +19,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PlayIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
-import SettingsIcon from '@mui/icons-material/Settings';
-import DetailsIcon from '@mui/icons-material/Info';
+// import SettingsIcon from '@mui/icons-material/Settings';
+// import DetailsIcon from '@mui/icons-material/Info';
 import DuplicateIcon from '@mui/icons-material/FileCopy';
 
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -235,7 +235,7 @@ export const LayerComponent = ({
                 <DuplicateIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Layer details">
+            {/* <Tooltip title="Layer details">
               <IconButton
                 size="small"
                 edge="end"
@@ -260,7 +260,7 @@ export const LayerComponent = ({
               >
                 <SettingsIcon />
               </IconButton>
-            </Tooltip>
+            </Tooltip> */}
             <Tooltip title="Enable/disable layer">
               <IconButton
                 size="small"
