@@ -5,7 +5,7 @@ Note: / TODO:
 Currently pinning versions to 9.8.0:
 
 ```
-    "@opengeoweb/store": "9.8.0",
+
     "@opengeoweb/theme": "9.8.0",
     "@opengeoweb/webmap-react": "9.8.0",
     "@opengeoweb/webmap": "9.8.0",

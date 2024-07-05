@@ -9,7 +9,6 @@ import {
   WMGetServiceFromStore,
   generateLayerId,
 } from '@opengeoweb/webmap';
-import selectLayer from '../../utils/selectLayer';
 
 interface WMSLayerSelectorProps {
   layerName: string;
@@ -65,7 +64,7 @@ const WMSLayerSelector = ({
   const handleSelectedItemsChange = (e, ids) => {
     const selected = ids as unknown as string;
     const selectedLayer = layers.current.find((lins) => lins.name === selected);
-    if (selectedLayer && selectLayer.name) {
+    if (selectedLayer && selectedLayer.name) {
       setMenuOpen(false);
       onSelectLayer(selectedLayer.name);
     }
