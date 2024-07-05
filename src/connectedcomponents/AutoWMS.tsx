@@ -24,6 +24,7 @@ const makeGoodServiceLink = (service: string): string => {
 
 const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
   const lowerCaseUrlParams = new URLSearchParams(window.location.search);
+
   const serviceFromQueryString =
     lowerCaseUrlParams.get('autowms') || lowerCaseUrlParams.get('wmsservice');
 
@@ -110,11 +111,28 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
 
   React.useEffect(() => {
     fetchAutoWMSList();
-  }, [path]);
+  }, [path, autoWMSService]);
 
   React.useEffect(() => {
     fetchLayersFromOGCWMSService();
   }, [ogcWMSService]);
+
+  React.useEffect(() => {
+    // eslint-disable-next-line no-void
+    void fetch('./config.json').then((r) => {
+      r.json()
+        .then((config) => {
+          if (config && config.autowmsurl) {
+            setAutoWMSService(
+              serviceFromQueryString?.length > 0
+                ? serviceFromQueryString
+                : config.autowmsurl,
+            );
+          }
+        })
+        .catch(() => {});
+    });
+  }, []);
 
   const autowmsExplorerList = currentLeaf.length === 0 &&
     layers?.length === 0 && (

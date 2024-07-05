@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 const path = require('path');
 const HtmlWebPackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: './src/application/index.tsx',
@@ -36,21 +37,15 @@ module.exports = {
         exclude: /(node_modules|dist)/,
         use: ['babel-loader'],
       },
-      // {
-      //   test: /\.html$/,
-      //   use: [
-      //     {
-      //       loader: 'html-loader',
-      //       options: { minimize: false },
-      //     },
-      //   ],
-      // },
     ],
   },
   plugins: [
     new HtmlWebPackPlugin({
       template: './src/application/index.html',
       filename: './index.html',
+    }),
+    new CopyWebpackPlugin({
+      patterns: [{ from: 'static' }],
     }),
   ],
   devServer: {

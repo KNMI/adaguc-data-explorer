@@ -94,8 +94,9 @@ const ToolPanel = ({
         style={{
           display: 'block',
           width: '100%',
-          height: '28px',
-          marginBottom: '10px',
+          height: '40px',
+          marginBottom: '0px',
+          background: '#BAD0EF',
         }}
       >
         <Tooltip
@@ -133,7 +134,7 @@ const ToolPanel = ({
                 setTabPage('TimeSeries');
               }}
             >
-              TBD TimeSeries
+              TimeSeries
             </Button>
             <Button
               size="small"
@@ -170,14 +171,15 @@ const ToolPanel = ({
         <div
           style={{ display: tabPage === 'TimeSeries' ? 'contents' : 'none' }}
         >
-          Timeseries
+          Timeseries TBD
         </div>
         <div
+          className="getfeatureinfo_panel"
           style={{
-            display: tabPage === 'GetFeatureInfo' ? 'contents' : 'none',
+            display: tabPage === 'GetFeatureInfo' ? 'block' : 'none',
           }}
         >
-          GetFeatureInfo
+          GetFeatureInfo: Click on the map
           <div>
             {getWMJSMapById(mapId)
               ?.getLayers()
