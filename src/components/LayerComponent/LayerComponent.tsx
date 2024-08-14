@@ -130,11 +130,11 @@ export const LayerComponent = ({
           fontSize: '14px',
           overflow: 'hidden',
           display: 'block',
-          position: 'absolute',
+          // position: 'absolute',
           width: '100%',
           noWrap: true,
         }}
-        style={{ padding: '5px 5px 20px 5px', background: '#BAD0EF' }}
+        style={{ padding: '5px 5px 5px 5px', background: '#BAD0EF' }}
       />
       <CardContent style={{ padding: '0px', margin: '0px' }}>
         <Grid
@@ -163,11 +163,7 @@ export const LayerComponent = ({
                 }}
               />
             </Grid>
-            <Grid
-              item
-              sx={{ paddingBottom: 1 }}
-              style={{ width: 'inherit', background: 'white' }}
-            >
+            <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
               {getWMLayerById(layer?.id)?.dimensions.map((layerDimension) => {
                 return (
                   <WMSDimensionSlider
@@ -191,37 +187,23 @@ export const LayerComponent = ({
             xs={2}
             style={{
               height: 'inherit',
-
               overflow: 'hidden',
             }}
           >
-            <img alt="legend" width="100%" src={legendGraphicUrl} />
+            <div
+              style={{
+                background: 'white',
+                height: 'inherit',
+                overflow: 'hidden',
+              }}
+            >
+              <img alt="legend" width="100%" src={legendGraphicUrl} />
+            </div>
           </Grid>
         </Grid>
         <Grid style={{ background: '#BAD0EF', height: '34px' }}>
-          <Grid style={{ float: 'right' }}>
-            <Tooltip title="Change opacity of this layer">
-              <Slider
-                value={(wmLayer?.opacity || 1) * 100}
-                style={{
-                  position: 'absolute',
-                  width: '70px',
-                  left: 0,
-                  margin: '2px',
-                }}
-                onChange={(e, value: number) => {
-                  if (wmLayer) {
-                    wmLayer.opacity = value / 100;
-                    onChangeOpacity(wmLayer.opacity);
-                    update();
-                  }
-                }}
-                size="small"
-                min={0}
-                max={100}
-                orientation="horizontal"
-              />
-            </Tooltip>
+          <Grid style={{ display: 'flex' }}>
+
             <Tooltip title="Duplicate">
               <IconButton
                 size="small"
@@ -261,6 +243,44 @@ export const LayerComponent = ({
                 <SettingsIcon />
               </IconButton>
             </Tooltip> */}
+
+            <Tooltip title="Play animation based on this layer">
+              <IconButton
+                size="small"
+                edge="end"
+                color="inherit"
+                aria-label="menu"
+                onClick={() => {
+                  layerToggleAnimation();
+                }}
+              >
+                {isAnimating ? <StopIcon /> : <PlayIcon />}
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="Change opacity of this layer">
+              <Slider
+                value={(wmLayer?.opacity || 1) * 100}
+                style={{
+                  // position: 'absolute',
+                  width: '100%',
+                  // left: 0,
+                  // padding: '2px',
+                  margin: '2px 10px 3px 0',
+                }}
+                onChange={(e, value: number) => {
+                  if (wmLayer) {
+                    wmLayer.opacity = value / 100;
+                    onChangeOpacity(wmLayer.opacity);
+                    update();
+                  }
+                }}
+                size="small"
+                min={0}
+                max={100}
+                orientation="horizontal"
+              />
+            </Tooltip>
             <Tooltip title="Enable/disable layer">
               <IconButton
                 size="small"
@@ -281,19 +301,6 @@ export const LayerComponent = ({
                 ) : (
                   <VisibilityOffIcon />
                 )}
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Play animation based on this layer">
-              <IconButton
-                size="small"
-                edge="end"
-                color="inherit"
-                aria-label="menu"
-                onClick={() => {
-                  layerToggleAnimation();
-                }}
-              >
-                {isAnimating ? <StopIcon /> : <PlayIcon />}
               </IconButton>
             </Tooltip>
             <Tooltip title="Zoom to extent of this layer">

@@ -178,11 +178,29 @@
 }
 
 .getfeatureinfo_result {
+  margin:3px;
+  border:1px solid gray;
+  border-radius: 2px;
+  padding:0px;
+  background: white;
+  box-shadow: rgba(0, 0, 0, 0.02) 0px 1px 3px 0px, rgba(27, 31, 35, 0.15) 0px 0px 0px 1px;
+}
+
+.getfeatureinfo_result_header {
+  padding:5px;
+  font-size: 12px;
+  margin:0 0 5px 0;
+  background: #BAD0EF;
+}
+
+
+.getfeatureinfo_result_contents {
   padding:5px;
   font-size: 12px;
   margin:5px 0;
   background: white;
 }
+
 
 .getfeatureinfo_panel{
   width:100%;

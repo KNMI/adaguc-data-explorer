@@ -3,7 +3,8 @@
 import * as React from 'react';
 import { ThemeWrapper } from '@opengeoweb/theme';
 import { Button, IconButton, Tooltip } from '@mui/material';
-import { ArrowForwardSharp, ArrowBackSharp } from '@mui/icons-material';
+import { ArrowForwardIos, ArrowBackIos } from '@mui/icons-material';
+
 import { getWMJSMapById } from '@opengeoweb/webmap';
 import { MapLocation } from '@opengeoweb/webmap-react';
 import { actions, useAppDispatch } from '../store/store';
@@ -31,6 +32,7 @@ const ToolPanel = ({
   const [tabPage, setTabPageState] = React.useState('AUTOWMS');
 
   const results = React.useRef(new Map<string, string>()).current;
+  const gfilinks = React.useRef(new Map<string, string>()).current;
 
   const [, setCount] = React.useState(0);
 
@@ -54,6 +56,7 @@ const ToolPanel = ({
               mouse.y,
               'text/html',
             );
+            gfilinks.set(layer.id, url);
             fetch(url)
               .then((r) => {
                 r.text().then((t) => {
@@ -113,7 +116,7 @@ const ToolPanel = ({
               toggleExpandToolsPanel(!toolsPanelIsExpanded);
             }}
           >
-            {toolsPanelIsExpanded ? <ArrowForwardSharp /> : <ArrowBackSharp />}
+            {toolsPanelIsExpanded ? <ArrowForwardIos /> : <ArrowBackIos />}
           </IconButton>
         </Tooltip>
         {toolsPanelIsExpanded && (
@@ -184,10 +187,19 @@ const ToolPanel = ({
             {getWMJSMapById(mapId)
               ?.getLayers()
               .map((layer) => {
+                const link = gfilinks.get(layer.id) || '';
                 return (
                   <div key={layer.id} className="getfeatureinfo_result">
-                    {layer.id}
+                    <div className="getfeatureinfo_result_header">
+                      Info for layer {layer.name} / {layer.title}
+                      {link && (
+                        <a target="_blank" rel="noreferrer" href={link}>
+                          - &#x29c9;
+                        </a>
+                      )}
+                    </div>
                     <div
+                      className="getfeatureinfo_result_contents"
                       // eslint-disable-next-line react/no-danger
                       dangerouslySetInnerHTML={sanitizeHTML(
                         results.get(layer.id) || '--',
