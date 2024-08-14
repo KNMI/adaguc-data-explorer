@@ -4,6 +4,7 @@ import { actions, useAppDispatch, useAppSelector } from '../store/store';
 import { selectors } from '../store/selectors';
 import { ViewerState } from '../store/types';
 import { ReduxLayerComponent } from './ReduxLayerComponent';
+import LayerDetailDialog from './LayerDetailsComponent/LayerDetailDialog';
 
 export interface SortableLayerListProps {
   mapId: string;
@@ -13,6 +14,10 @@ export const SortableLayerList = ({
   mapId,
 }: SortableLayerListProps): React.ReactElement<SortableLayerListProps> => {
   const dispatch = useAppDispatch();
+
+  const [layerDetailsForLayerId, openlayerDetails] = React.useState<
+    string | null
+  >(null);
   const setLayerOrderByIds = (layerListIds: string[]) => {
     dispatch(actions.setLayerOrderByIds({ mapId, layerListIds }));
   };
@@ -29,6 +34,13 @@ export const SortableLayerList = ({
           'repeating-linear-gradient(-35deg,#D3CDE8,#D3CDE8 8px,#D1CBE6 8px, #D1CBE6 16px)',
       }}
     >
+      <LayerDetailDialog
+        isDialogOpen={layerDetailsForLayerId !== null}
+        layerId={layerDetailsForLayerId}
+        onClose={() => {
+          openlayerDetails(null);
+        }}
+      />
       <ReactSortable
         setList={(newList) => {
           if (layersInMap.join() === newList.map((it) => it.id).join()) {
@@ -47,6 +59,9 @@ export const SortableLayerList = ({
               layerId={layerId}
               mapId={mapId}
               layerIndex={k}
+              openLayerDetails={(__layerId) => {
+                openlayerDetails(__layerId);
+              }}
             />
           );
         })}

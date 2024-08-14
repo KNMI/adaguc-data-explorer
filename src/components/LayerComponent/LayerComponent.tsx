@@ -19,7 +19,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PlayIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
-// import SettingsIcon from '@mui/icons-material/Settings';
+import SettingsIcon from '@mui/icons-material/Settings';
 // import DetailsIcon from '@mui/icons-material/Info';
 import DuplicateIcon from '@mui/icons-material/FileCopy';
 
@@ -30,6 +30,7 @@ import WMSDimensionSlider from '../WMSComponents/WMSDimensionSlider';
 import WMSStyleSelector from '../WMSComponents/WMSStyleSelector';
 import WMSLayerSelector from './WMSLayerSelector';
 import { AdagucLayer } from '../../store/types';
+import { CopyToClipBoard } from '../../connectedcomponents/CopyToClipBoard';
 
 export interface LayerComponentProps {
   serviceUrl: string;
@@ -39,6 +40,7 @@ export interface LayerComponentProps {
   styles: Style[];
   isAnimating: boolean;
   onSelectLayer: (layerName: string) => void;
+  openLayerDetails: (layerId: string) => void;
   onSelectStyle: (style: string) => void;
   onChangeLayerEnabled: (enabled: boolean) => void;
   onChangeOpacity: (opacity: number) => void;
@@ -53,6 +55,7 @@ export const LayerComponent = ({
   serviceUrl,
   layer,
   onSelectLayer,
+  openLayerDetails,
   onSelectStyle,
   onChangeLayerEnabled,
   onChangeOpacity,
@@ -74,8 +77,13 @@ export const LayerComponent = ({
     setUpdate((count + 1) % 10);
   };
   const wmLayer = getWMLayerById(layer?.id);
-  const cardTitle = `${wmLayer?.title}`;
-  const cardSubTitle = `Name: ${layer?.name}`;
+  const cardTitle = `Layer ${wmLayer?.title}`;
+  const cardSubTitle = (
+    <>
+      <CopyToClipBoard info="layer name" text={layer?.name} />
+      <code>{layer?.name}</code>
+    </>
+  );
 
   const [legendGraphicUrl, setLegendGraphic] = React.useState<string>('');
 
@@ -106,12 +114,13 @@ export const LayerComponent = ({
 
   return (
     <Card
-      style={{
-        padding: '0px',
-        margin: 0,
-        marginBottom: '10px',
-        background: '#E8E8EF',
-      }}
+      className="layercomponent_item"
+      // style={{
+      //   padding: '0px',
+      //   margin: 0,
+      //   marginBottom: '10px',
+      //   background: '#E8E8EF',
+      // }}
     >
       <CardHeader
         title={cardTitle}
@@ -123,7 +132,7 @@ export const LayerComponent = ({
           width: '100%',
           display: 'block',
           height: '20px',
-          maxWidth: '280px',
+          maxWidth: '220px',
           noWrap: true,
         }}
         subheaderTypographyProps={{
@@ -132,7 +141,8 @@ export const LayerComponent = ({
           display: 'block',
           // position: 'absolute',
           width: '100%',
-          noWrap: true,
+          // maxWidth: '280px',
+          // noWrap: true,
         }}
         style={{ padding: '5px 5px 5px 5px', background: '#BAD0EF' }}
       />
@@ -203,7 +213,6 @@ export const LayerComponent = ({
         </Grid>
         <Grid style={{ background: '#BAD0EF', height: '34px' }}>
           <Grid style={{ display: 'flex' }}>
-
             <Tooltip title="Duplicate">
               <IconButton
                 size="small"
@@ -229,7 +238,7 @@ export const LayerComponent = ({
               >
                 <DetailsIcon />
               </IconButton>
-            </Tooltip>
+            </Tooltip> */}
             <Tooltip title="Layer settings">
               <IconButton
                 size="small"
@@ -237,12 +246,12 @@ export const LayerComponent = ({
                 color="inherit"
                 aria-label="menu"
                 onClick={() => {
-                  alert('tbi');
+                  openLayerDetails(layer.id);
                 }}
               >
                 <SettingsIcon />
               </IconButton>
-            </Tooltip> */}
+            </Tooltip>
 
             <Tooltip title="Play animation based on this layer">
               <IconButton

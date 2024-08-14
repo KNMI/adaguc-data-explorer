@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { IconButton, Snackbar } from '@mui/material';
+import { IconButton, Snackbar, Tooltip } from '@mui/material';
 import CopyToClipBoardIcon from '@mui/icons-material/ContentCopy';
 
 export interface CopyButtonProps {
@@ -31,14 +31,20 @@ export const CopyToClipBoard = ({
         }}
         message={message}
       />
-      <IconButton
-        aria-label="copy"
-        onClick={() => {
-          copyTextToClipBoard(text);
-        }}
-      >
-        <CopyToClipBoardIcon />
-      </IconButton>
+      <span style={{ display: 'inline' }}>
+        <Tooltip title={`Copy ${info}`}>
+          <IconButton
+            aria-label="copy"
+            size="small"
+            style={{ fontSize: '6px', padding: 0, margin: '0 2px' }}
+            onClick={() => {
+              copyTextToClipBoard(text);
+            }}
+          >
+            <CopyToClipBoardIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </span>
     </>
   );
 };

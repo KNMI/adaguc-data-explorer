@@ -60,7 +60,11 @@ export const ReduxMapViewComponent = ({
           />
         );
       })}
-      <MapViewLayer {...overlayLayer} type="baseLayer" />
+      <MapViewLayer
+        {...overlayLayer}
+        type="baseLayer"
+        layerType={LayerType.overLayer}
+      />
     </MapView>
   );
 };

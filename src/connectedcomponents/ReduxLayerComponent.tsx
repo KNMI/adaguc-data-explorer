@@ -9,12 +9,14 @@ export interface ReduxLayerComponentProps {
   mapId: string;
   layerId: string;
   layerIndex: number;
+  openLayerDetails: (layerId: string) => void;
 }
 
 export const ReduxLayerComponent = ({
   mapId,
   layerId,
   layerIndex,
+  openLayerDetails,
 }: ReduxLayerComponentProps) => {
   const dispatch = useAppDispatch();
 
@@ -128,6 +130,9 @@ export const ReduxLayerComponent = ({
       }}
       onSelectLayer={(_layer) => {
         selectLayer(_layer);
+      }}
+      openLayerDetails={(_layerId) => {
+        openLayerDetails(_layerId);
       }}
       onChangeOpacity={(opacity) => {
         changeLayerOpacity(opacity);
