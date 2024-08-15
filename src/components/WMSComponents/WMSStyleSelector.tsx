@@ -8,47 +8,50 @@ import {
   Select,
   SelectChangeEvent,
 } from '@mui/material';
-import { getWMLayerById } from '@opengeoweb/webmap';
-import { Layer } from '@opengeoweb/store/src/store/mapStore/types';
+import { Style } from '@opengeoweb/webmap';
 
 interface WMSStyleSelectorProps {
-  layer: Layer;
-  onSelectStyle: (layer: Layer) => void;
+  styleName: string;
+  styles: Style[];
+  onSelectStyle: (styleName: string) => void;
 }
 
 const WMSStyleSelector = ({
-  layer,
+  styleName,
+  styles,
   onSelectStyle,
 }: WMSStyleSelectorProps): React.ReactElement<WMSStyleSelectorProps> => {
   const handleChange = (event: SelectChangeEvent<string>) => {
-    const newLayer: Layer = { ...layer };
-    newLayer.style = event.target.value;
-    const wmLayer = getWMLayerById(layer.id);
-    wmLayer.setStyle(newLayer.style);
-    wmLayer.parentMap.draw();
-    onSelectStyle(newLayer);
+    // const newLayer: Layer = { ...layer };
+    // newLayer.style = event.target.value;
+    // const wmLayer = getWMLayerById(layer.id);
+    // wmLayer.setStyle(newLayer.style);
+    // wmLayer.parentMap?.draw();
+    onSelectStyle(event.target.value);
   };
-  if (!layer || !layer.id) return null;
-  const wmLayer = getWMLayerById(layer.id);
-  if (!wmLayer) return null;
-  const styles = wmLayer.getStyles();
-  if (!styles) return null;
-  const currentStyle = wmLayer.getStyle();
 
+  const styleList = [...(styles && styles.length ? styles : [])];
+  styleList.push({
+    name: 'default',
+    title: 'default',
+    legendURL: '',
+    abstract: '',
+  });
+  const selectedStyleName = styleName || styleList[0].name;
   return (
-    <Box sx={{ height: '100%' }}>
-      <FormControl size="small">
+    <Box sx={{ height: '100%', width: '100%' }}>
+      <FormControl size="small" sx={{ width: 'inherit' }}>
         <InputLabel size="small">Style</InputLabel>
         <Select
           size="small"
-          value={currentStyle}
+          value={selectedStyleName}
           label="Style"
           onChange={handleChange}
         >
-          {styles.map((l, i) => (
+          {styleList.map((l, i) => (
             // eslint-disable-next-line react/no-array-index-key
             <MenuItem key={`${l.name}i${i}`} value={l.name}>
-              {l.title}
+              {l.title} - {l.name}
             </MenuItem>
           ))}
         </Select>
