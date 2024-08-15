@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { LayerProps, WMGetServiceFromStore } from '@opengeoweb/webmap';
-import { IconButton, TextField, Tooltip } from '@mui/material';
+import { IconButton, LinearProgress, TextField, Tooltip } from '@mui/material';
 import ArrowForwardSharp from '@mui/icons-material/ArrowForwardSharp';
+import { CopyToClipBoard } from '../CopyToClipBoard';
 
 interface AutoWMSResult {
   result: { path: string; name: string; leaf: boolean; adaguc?: string }[];
@@ -30,6 +31,7 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
 
   const [result, setResult] = React.useState<AutoWMSResult>({ result: [] });
   const [path, changePath] = React.useState<string>('');
+  const [isLoading, setLoading] = React.useState<boolean>(false);
   const [currentLeaf, changeLeaf] = React.useState<string>('');
   const [layers, setLayers] = React.useState<LayerProps[]>([]);
   const [wmsAbstract, setWMSAbstract] = React.useState<string>('');
@@ -56,6 +58,8 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
     const subquery = 'request=getfiles&path=';
     const url = makeGoodServiceLink(autoWMSService) + subquery + path;
     setLayers([]);
+    setOGCWMSService('');
+    setLoading(true);
     fetch(url)
       .then((a) => a.json())
       .then((b) => {
@@ -63,6 +67,9 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
       })
       .catch((e) => {
         handleError(e);
+      })
+      .finally(() => {
+        setLoading(false);
       });
   };
 
@@ -70,12 +77,15 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
     if (ogcWMSService.length > 0) {
       const wmsLink = `${ogcWMSService}SERVICE=WMS&REQUEST=GetCapabilities`;
       setLayers([]);
+      setLoading(true);
       WMGetServiceFromStore(wmsLink).getLayerObjectsFlat(
         (_layers) => {
+          setLoading(false);
           setLayers(_layers);
           setWMSAbstract(WMGetServiceFromStore(wmsLink).abstract);
         },
         (f) => {
+          setLoading(false);
           handleError(f);
         },
         true,
@@ -103,10 +113,10 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
 
     if (isWMSService(autoWMSService)) {
       setOGCWMSService(autoWMSService);
+      window.setTimeout(() => {
+        fetchLayersFromOGCWMSService();
+      }, 100);
     }
-    window.setTimeout(() => {
-      fetchLayersFromOGCWMSService();
-    }, 100);
   };
 
   React.useEffect(() => {
@@ -165,15 +175,20 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
     );
 
   const wmsLink = `${ogcWMSService}SERVICE=WMS&REQUEST=GetCapabilities`;
+  const autowmsWMSServiceHeader = ogcWMSService?.length > 0 && (
+    <div className="autowms_app_serviceabstract">
+      Abstract: {wmsAbstract}
+      <hr />
+      WMS:
+      <CopyToClipBoard info="WMS Service link" text={wmsLink} />
+      <a target="_blank" rel="noreferrer" href={wmsLink}>
+        {wmsLink}
+      </a>
+    </div>
+  );
+
   const autowmsWMSService = layers?.length > 0 && (
     <div>
-      <div className="autowms_app_serviceabstract">
-        Abstract: {wmsAbstract}
-        <hr />. WMS:{' '}
-        <a target="_blank" rel="noreferrer" href={wmsLink}>
-          {wmsLink}
-        </a>
-      </div>
       {layers.map((layer: LayerProps, i) => {
         const wmsImage = `${ogcWMSService}&LAYERS=${layer.name}&WIDTH=400&HEIGHT=400&SERVICE=WMS&request=GETMAP&format=image/webp&CRS=EPSG:4326`;
         return (
@@ -216,7 +231,7 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
                 fetchNewAutoWMS();
               }
             }}
-          />{' '}
+          />
           <Tooltip title="Load (you can also reference this via the ?autowms=<url> querystring in the browser location bar">
             <IconButton
               size="small"
@@ -245,6 +260,7 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
               return;
             }
             setLayers([]);
+            setOGCWMSService('');
             if (currentLeaf.length > 0) {
               changeLeaf('');
             } else {
@@ -276,7 +292,9 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
         </span>
       </span>
       {autowmsExplorerList}
+      {autowmsWMSServiceHeader}
       {autowmsWMSService}
+      {isLoading && <LinearProgress />}
     </div>
   );
 };

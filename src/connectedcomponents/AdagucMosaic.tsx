@@ -15,7 +15,7 @@ export const AdagucMosaic = ({
   );
 
   const layerPanelWidth = 300;
-  const rightPanelWidth = 400;
+  const rightPanelWidth = 500;
 
   const leftPanelWidthPercentage = (layerPanelWidth / screenWidth) * 100;
   const autoWMSPanelWidthPercentage =
