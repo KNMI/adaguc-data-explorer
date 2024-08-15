@@ -1,0 +1,17 @@
+*
+!.storybook/
+!docs/
+!src/
+!static/
+!stories/
+!.browser-refresh-ignore
+!package.json
+!package-lock.json
+!.eslintignore
+!.eslintrc
+!.npmignore
+!.prettierrc
+!babel.config.js
+!postcss.config.js
+!tsconfig.json
+!webpack.config.js

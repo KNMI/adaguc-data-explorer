@@ -45,3 +45,11 @@ The application is in that case written to the `dist` folder. You run the applic
 `npx serve dist`
 
 and then visit the url http://localhost:3000/ in your browser.
+
+
+## Docker
+
+```
+docker build . -t adaguc-data-explorer
+docker run -it -p 3000:3000 adaguc-data-explorer
+```
