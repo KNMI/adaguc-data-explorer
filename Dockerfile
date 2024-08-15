@@ -13,12 +13,20 @@ RUN npm run build
 
 ##### STAGE 2 #####
 
-FROM node:20-alpine
+FROM nginx:1.27-alpine
 
-WORKDIR /usr/src/app
+WORKDIR /usr/share/nginx/html
 
-COPY --from=builder /usr/src/app/dist dist
+COPY --from=builder /usr/src/app/dist .
 
-RUN npm install -g serve
+EXPOSE 80
 
-CMD ["npx", "serve", "dist"]
+COPY entrypoint.sh /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+ENV ADAGUC_AUTOWMS_ENDPOINT="http://localhost:8090/adaguc-services/autowms?"
+
+CMD ["nginx","-g","daemon off;"]
