@@ -51,7 +51,7 @@ and then visit the url http://localhost:3000/ in your browser.
 
 ```
 docker build . -t adaguc-data-explorer
-docker run -it -p 8080:80 adaguc-data-explorer
+docker run -it -e ADAGUC_AUTOWMS_ENDPOINT=https://geoservices.knmi.nl/autowms -p 8080:80 adaguc-data-explorer
 # Vist http://localhost:8080/
 
 ```
