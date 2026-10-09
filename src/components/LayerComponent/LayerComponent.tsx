@@ -1,11 +1,7 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
 
-import {
-  Style,
-  getLegendGraphicURLForLayer,
-  getWMLayerById,
-} from '@opengeoweb/webmap';
+import { Style, getWMLayerById } from '@opengeoweb/webmap';
 import {
   Card,
   CardContent,
@@ -25,7 +21,6 @@ import DuplicateIcon from '@mui/icons-material/FileCopy';
 
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
-import { debounce } from 'lodash';
 import WMSDimensionSlider from '../WMSComponents/WMSDimensionSlider';
 import WMSStyleSelector from '../WMSComponents/WMSStyleSelector';
 import WMSLayerSelector from './WMSLayerSelector';
@@ -49,6 +44,7 @@ export interface LayerComponentProps {
   setDimensionValue: (dimensionName: string, dimensionValue: string) => void;
   removeLayer: () => void;
   layerToggleAnimation: () => void;
+  zoomToLayer: () => void;
   update: () => void;
 }
 export const LayerComponent = ({
@@ -67,6 +63,7 @@ export const LayerComponent = ({
   setDimensionValue,
   removeLayer,
   layerToggleAnimation,
+  zoomToLayer,
   update: updateParent,
   layerIndex,
 }: LayerComponentProps): React.ReactElement<LayerComponentProps> => {
@@ -84,17 +81,6 @@ export const LayerComponent = ({
       <code>{layer?.name}</code>
     </>
   );
-
-  const [legendGraphicUrl, setLegendGraphic] = React.useState<string>('');
-
-  const debouncedHandleChange = React.useRef(
-    debounce((dwmLayer) => {
-      const undebouncedLegendGraphic = getLegendGraphicURLForLayer(dwmLayer);
-      setLegendGraphic(undebouncedLegendGraphic);
-    }, 500),
-  ).current;
-
-  debouncedHandleChange(wmLayer);
 
   const cardActions = (
     <Tooltip title="Remove this layer">
@@ -152,7 +138,7 @@ export const LayerComponent = ({
           direction="row"
           style={{ padding: '2px', margin: 0, marginTop: '5px' }}
         >
-          <Grid item xs={10}>
+          <Grid item xs={12}>
             <Grid item sx={{ paddingBottom: 1 }} style={{ width: 'inherit' }}>
               <WMSLayerSelector
                 layerName={layer?.name}
@@ -190,25 +176,6 @@ export const LayerComponent = ({
                 );
               })}
             </Grid>
-          </Grid>
-
-          <Grid
-            item
-            xs={2}
-            style={{
-              height: 'inherit',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                background: 'white',
-                height: 'inherit',
-                overflow: 'hidden',
-              }}
-            >
-              <img alt="legend" width="100%" src={legendGraphicUrl} />
-            </div>
           </Grid>
         </Grid>
         <Grid style={{ background: '#BAD0EF', height: '34px' }}>
@@ -319,8 +286,7 @@ export const LayerComponent = ({
                 color="inherit"
                 aria-label="menu"
                 onClick={() => {
-                  getWMLayerById(layer?.id)?.zoomToLayer();
-                  getWMLayerById(layer?.id)?.parentMap?.draw();
+                  zoomToLayer();
                 }}
               >
                 <CenterFocusStrongIcon />

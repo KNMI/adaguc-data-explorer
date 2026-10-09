@@ -3,12 +3,11 @@ import * as React from 'react';
 import { Box, FormControl, InputLabel, MenuItem, Select } from '@mui/material';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
+import { LayerTree, generateLayerId } from '@opengeoweb/webmap';
 import {
-  LayerProps,
-  LayerTree,
-  WMGetServiceFromStore,
-  generateLayerId,
-} from '@opengeoweb/webmap';
+  useQueryGetWMSLayers,
+  useQueryGetWMSLayersTree,
+} from '@opengeoweb/webmap-react';
 
 interface WMSLayerSelectorProps {
   layerName: string;
@@ -56,14 +55,14 @@ const WMSLayerSelector = ({
   serviceUrl,
   onSelectLayer,
 }: WMSLayerSelectorProps): React.ReactElement<WMSLayerSelectorProps> => {
-  const tree = React.useRef<LayerTree>(null);
-  const layers = React.useRef<LayerProps[]>([]);
+  const tree = useQueryGetWMSLayersTree(serviceUrl);
+  const layers = useQueryGetWMSLayers(serviceUrl);
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
   const [menuOpen, setMenuOpen] = React.useState<boolean>(false);
 
   const handleSelectedItemsChange = (e, ids) => {
     const selected = ids as unknown as string;
-    const selectedLayer = layers.current.find((lins) => lins.name === selected);
+    const selectedLayer = layers.find((lins) => lins.name === selected);
     if (selectedLayer && selectedLayer.name) {
       setMenuOpen(false);
       onSelectLayer(selectedLayer.name);
@@ -77,40 +76,17 @@ const WMSLayerSelector = ({
     setExpandedItems(itemIds);
   };
 
+  React.useEffect((): void => {
+    if (tree?.title) {
+      setExpandedItems([tree.title]);
+    }
+  }, [tree?.title]);
+
   if (!serviceUrl) {
     return null;
   }
 
-  // eslint-disable-next-line consistent-return
-  React.useEffect((): void => {
-    const service = WMGetServiceFromStore(serviceUrl);
-    if (!service) return null;
-    if (tree.current === null) {
-      service.getNodes(
-        (t) => {
-          tree.current = t;
-          setExpandedItems([t.title]);
-          service.getLayerObjectsFlat(
-            (ls) => {
-              layers.current = ls;
-            },
-            (e) => {
-              // eslint-disable-next-line no-console
-              console.error(e);
-            },
-            false,
-          );
-        },
-        (e) => {
-          // eslint-disable-next-line no-console
-          console.error(e);
-        },
-        false,
-      );
-    }
-  }, [serviceUrl, tree]);
-
-  const selectedLayer = layers.current.find((lins) => lins.name === layerName);
+  const selectedLayer = layers.find((lins) => lins.name === layerName);
 
   return (
     <Box sx={{ height: '100%', width: '100%' }}>
@@ -142,7 +118,7 @@ const WMSLayerSelector = ({
             onSelectedItemsChange={handleSelectedItemsChange}
             onExpandedItemsChange={handleExpandedItemsChange}
           >
-            <MakeTree tree={tree.current} />
+            <MakeTree tree={tree} />
           </SimpleTreeView>
         </Select>
       </FormControl>

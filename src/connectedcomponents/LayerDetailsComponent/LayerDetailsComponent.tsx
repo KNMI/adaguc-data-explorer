@@ -2,13 +2,14 @@ import React from 'react';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
-import { WMGetServiceFromStore, getWMLayerById } from '@opengeoweb/webmap';
+import { queryWMSLayers, getWMLayerById } from '@opengeoweb/webmap';
 import ProjectionSelector from './ProjectionSelector';
 import AdagucNCDumpPanel from './AdagucNCDumpPanel';
 import WMSColorRangeSelector from './WMSColorRangeSelector';
 import { CopyToClipBoard } from '../CopyToClipBoard';
 
 export interface LayerDetailsComponentProps {
+  mapId: string;
   layerId: string;
 }
 
@@ -38,6 +39,7 @@ const CustomTabPanel = (props: TabPanelProps) => {
 };
 
 const LayerDetailsComponent = ({
+  mapId,
   layerId,
 }: LayerDetailsComponentProps): React.ReactElement<LayerDetailsComponentProps> => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -70,21 +72,19 @@ const LayerDetailsComponent = ({
 
   React.useEffect(() => {
     setLayerObject({});
-    WMGetServiceFromStore(wmLayer.service).getLayerObjectsFlat(
-      (s) => {
+    queryWMSLayers(wmLayer.service)
+      .then((s) => {
         const r = s.filter((_layer) => {
           return _layer?.name === wmLayer?.name;
         });
         if (r.length === 1) {
           setLayerObject(r[0]);
         }
-      },
-      (e) => {
+      })
+      .catch((e) => {
         // eslint-disable-next-line no-console
         console.error(e);
-      },
-      false,
-    );
+      });
   }, []);
 
   return (
@@ -145,7 +145,7 @@ const LayerDetailsComponent = ({
           </div>
         </CustomTabPanel>
         <CustomTabPanel value={value} index={2}>
-          <ProjectionSelector wmLayer={wmLayer} />
+          <ProjectionSelector mapId={mapId} wmLayer={wmLayer} />
         </CustomTabPanel>
         <CustomTabPanel value={value} index={3}>
           <AdagucNCDumpPanel wmLayer={wmLayer} />

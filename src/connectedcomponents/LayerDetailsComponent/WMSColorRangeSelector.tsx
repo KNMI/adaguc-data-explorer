@@ -1,6 +1,7 @@
 import React from 'react';
 import { WMLayer } from '@opengeoweb/webmap';
 import { Button, TextField } from '@mui/material';
+import { refreshLayerSource } from '../../utils/refreshLayerSource';
 
 interface WMSColorRangeSelectorProps {
   wmLayer: WMLayer;
@@ -38,7 +39,7 @@ const WMSColorRangeSelector = ({
     setMaxValue(`${maxValueFloat}`);
     // eslint-disable-next-line no-param-reassign
     wmLayer.wmsextensions.url = `&COLORSCALERANGE=${minValueFloat},${maxValueFloat}`;
-    wmLayer.draw('wmsextenstion');
+    refreshLayerSource(wmLayer);
   };
 
   return (
@@ -74,7 +75,7 @@ const WMSColorRangeSelector = ({
         onClick={() => {
           // eslint-disable-next-line no-param-reassign
           wmLayer.wmsextensions.url = '';
-          wmLayer.draw('wmsextenstion');
+          refreshLayerSource(wmLayer);
         }}
       >
         Reset

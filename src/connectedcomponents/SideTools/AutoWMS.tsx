@@ -1,8 +1,14 @@
 import * as React from 'react';
-import { LayerProps, WMGetServiceFromStore } from '@opengeoweb/webmap';
+import {
+  LayerProps,
+  queryWMSLayers,
+  queryWMSServiceInfo,
+} from '@opengeoweb/webmap';
 import { IconButton, LinearProgress, TextField, Tooltip } from '@mui/material';
 import ArrowForwardSharp from '@mui/icons-material/ArrowForwardSharp';
 import { CopyToClipBoard } from '../CopyToClipBoard';
+
+const AUTOWMS_INPUT_DEBOUNCE_MS = 600;
 
 interface AutoWMSResult {
   result: { path: string; name: string; leaf: boolean; adaguc?: string }[];
@@ -35,6 +41,15 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
   const [currentLeaf, changeLeaf] = React.useState<string>('');
   const [layers, setLayers] = React.useState<LayerProps[]>([]);
   const [wmsAbstract, setWMSAbstract] = React.useState<string>('');
+
+  // What is currently typed in the text field, updated on every keystroke.
+  const [autoWMSServiceInput, setAutoWMSServiceInput] = React.useState<string>(
+    serviceFromQueryString || '',
+  );
+  // The committed service url that actually drives fetching the AutoWMS
+  // explorer listing. Kept in sync with autoWMSServiceInput after a short
+  // debounce while typing, or immediately on Enter/Load, so we don't fire a
+  // request for every keystroke (and for every half-typed url/port).
   const [autoWMSService, setAutoWMSService] = React.useState<string>(
     serviceFromQueryString || '',
   );
@@ -78,18 +93,16 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
       const wmsLink = `${ogcWMSService}SERVICE=WMS&REQUEST=GetCapabilities`;
       setLayers([]);
       setLoading(true);
-      WMGetServiceFromStore(wmsLink).getLayerObjectsFlat(
-        (_layers) => {
+      Promise.all([queryWMSLayers(wmsLink, true), queryWMSServiceInfo(wmsLink)])
+        .then(([_layers, serviceInfo]) => {
           setLoading(false);
           setLayers(_layers);
-          setWMSAbstract(WMGetServiceFromStore(wmsLink).abstract);
-        },
-        (f) => {
+          setWMSAbstract(serviceInfo.abstract);
+        })
+        .catch((f) => {
           setLoading(false);
           handleError(f);
-        },
-        true,
-      );
+        });
     } else {
       setLayers([]);
     }
@@ -110,14 +123,26 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
     changePath('');
     changeLeaf('');
     setOGCWMSService('');
+    // Commit the typed value immediately, bypassing the debounce below, so
+    // Enter / the Load button always fetches right away.
+    setAutoWMSService(autoWMSServiceInput);
 
-    if (isWMSService(autoWMSService)) {
-      setOGCWMSService(autoWMSService);
-      window.setTimeout(() => {
-        fetchLayersFromOGCWMSService();
-      }, 100);
+    if (isWMSService(autoWMSServiceInput)) {
+      setOGCWMSService(autoWMSServiceInput);
     }
   };
+
+  // Debounce typing: only commit (and thus fetch) once the user pauses,
+  // instead of on every keystroke.
+  React.useEffect(() => {
+    if (autoWMSServiceInput === autoWMSService) {
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setAutoWMSService(autoWMSServiceInput);
+    }, AUTOWMS_INPUT_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [autoWMSServiceInput]);
 
   React.useEffect(() => {
     fetchAutoWMSList();
@@ -133,11 +158,12 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
       r.json()
         .then((config) => {
           if (config && config.autowmsurl) {
-            setAutoWMSService(
+            const service =
               serviceFromQueryString?.length > 0
                 ? serviceFromQueryString
-                : config.autowmsurl,
-            );
+                : config.autowmsurl;
+            setAutoWMSServiceInput(service);
+            setAutoWMSService(service);
           }
         })
         .catch(() => {});
@@ -222,9 +248,9 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
             id="outlined-basic"
             label="Add AutoWMS or WMS service"
             variant="outlined"
-            value={autoWMSService}
+            value={autoWMSServiceInput}
             onChange={(e) => {
-              setAutoWMSService(e.target.value);
+              setAutoWMSServiceInput(e.target.value);
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {

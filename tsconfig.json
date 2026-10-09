@@ -15,7 +15,7 @@
     "jsx": "react",
     "declaration": true
   },
-  "include": ["src", "stories", "webpack.config.js"],
+  "include": ["src", "stories", "webpack.config.js", "jest.config.js"],
   "exclude": [
     "node_modules",
     "build",
@@ -24,8 +24,6 @@
     "acceptance-tests",
     "webpack",
     "jest",
-    "src/setupTests.ts",
-    "**/*/*.test.ts",
     "examples"
   ]
 }

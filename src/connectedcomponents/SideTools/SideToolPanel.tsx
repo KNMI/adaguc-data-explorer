@@ -6,6 +6,7 @@ import { useAppDispatch } from '../../store/store';
 import AutoWMS from './AutoWMS';
 import { thunks } from '../../store/thunks';
 import GetFeatureInfoPanel from './GetFeatureInfoPanel';
+import LegendPanel from './LegendPanel';
 
 export interface ToolPanelInterface {
   toggleExpandToolsPanel: (boolean) => void;
@@ -80,6 +81,15 @@ const SideToolPanel = ({
             >
               GetFeatureInfo
             </Button>
+            <Button
+              size="small"
+              variant={tabPage === 'Legend' ? 'contained' : 'outlined'}
+              onClick={() => {
+                setTabPage('Legend');
+              }}
+            >
+              Legend
+            </Button>
           </>
         )}
       </div>
@@ -118,6 +128,14 @@ const SideToolPanel = ({
             mapId={mapId}
             active={tabPage === 'GetFeatureInfo'}
           />
+        </div>
+        <div
+          className="legend_panel_container"
+          style={{
+            display: tabPage === 'Legend' ? 'block' : 'none',
+          }}
+        >
+          <LegendPanel mapId={mapId} />
         </div>
       </div>
     </div>

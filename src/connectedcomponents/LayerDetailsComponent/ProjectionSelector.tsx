@@ -1,19 +1,27 @@
 import React from 'react';
 import { WMLayer } from '@opengeoweb/webmap';
-import WMProjection from '@opengeoweb/webmap/src/lib/components/WMProjection';
+import { actions, useAppDispatch, useAppSelector } from '../../store/store';
+import { AdagucMapView, ViewerState } from '../../store/types';
 import ProjectionNameMappings from './ProjectionNameMappings';
 
 interface ProjectionSelectorProps {
+  mapId: string;
   wmLayer: WMLayer;
 }
 const ProjectionSelector = ({
+  mapId,
   wmLayer,
 }: ProjectionSelectorProps): React.ReactElement => {
-  const [currentSrs, setSrs] = React.useState<string>(
-    wmLayer.parentMap.getProjection().srs,
+  const dispatch = useAppDispatch();
+  const view = useAppSelector(
+    (state: ViewerState): AdagucMapView => state?.viewer?.maps[mapId]?.view,
   );
+  const currentSrs = view?.srs;
 
-  const projectionItems = new Map<string, WMProjection>();
+  const projectionItems = new Map<
+    string,
+    WMLayer['projectionProperties'][number]
+  >();
   wmLayer?.projectionProperties.forEach((p) => {
     projectionItems.set(p.srs, p);
   });
@@ -37,9 +45,13 @@ const ProjectionSelector = ({
                 key={wmLayer.id + p.srs}
                 className={currentSrs === p.srs ? 'selected' : ''}
                 onClick={() => {
-                  wmLayer.parentMap.setProjection(p.srs, p.bbox);
-                  wmLayer.parentMap.draw();
-                  setSrs(p.srs);
+                  dispatch(
+                    actions.requestSetProjection({
+                      mapId,
+                      srs: p.srs,
+                      bbox: p.bbox,
+                    }),
+                  );
                 }}
               >
                 <td>{p.srs}</td>

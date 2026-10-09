@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Style, generateLayerId, getWMJSMapById } from '@opengeoweb/webmap';
+import { Style, generateLayerId } from '@opengeoweb/webmap';
 import { actions, useAppDispatch, useAppSelector } from '../store/store';
 import { selectors } from '../store/selectors';
 import { AdagucLayer, ViewerState } from '../store/types';
@@ -34,8 +34,13 @@ export const ReduxLayerComponent = ({
     dispatch(
       actions.fullFillAddLayer({
         mapId,
-        ...layer,
         id: generateLayerId(),
+        name: layer.name,
+        serviceUrl: layer.serviceUrl,
+        styleName: layer.style,
+        enabled: layer.enabled,
+        opacity: layer.opacity,
+        dimensions: layer.dimensions.map((dimension) => ({ ...dimension })),
       }),
     );
   };
@@ -50,9 +55,8 @@ export const ReduxLayerComponent = ({
     );
   };
 
-  const layer = useAppSelector(
-    (state: ViewerState): AdagucLayer =>
-      selectors.getMapLayerById(state, mapId, layerId),
+  const layer = useAppSelector((state: ViewerState): AdagucLayer =>
+    selectors.getMapLayerById(state, mapId, layerId),
   );
 
   const styleList = useAppSelector((state: ViewerState): Style[] =>
@@ -95,6 +99,15 @@ export const ReduxLayerComponent = ({
       actions.layerToggleAnimation({
         mapId,
         layerIndex,
+      }),
+    );
+  };
+
+  const zoomToLayer = () => {
+    dispatch(
+      actions.requestZoomToLayer({
+        mapId,
+        layerId,
       }),
     );
   };
@@ -152,9 +165,7 @@ export const ReduxLayerComponent = ({
       ): void => {
         changeLayerDimension(dimensionName, dimensionValue);
       }}
-      update={(): void => {
-        getWMJSMapById(mapId).draw();
-      }}
+      update={(): void => {}}
       styles={styleList}
       selectedStyleName={layer?.style}
       onSelectStyle={(style: string): void => {
@@ -165,6 +176,9 @@ export const ReduxLayerComponent = ({
       }}
       layerToggleAnimation={() => {
         layerToggleAnimation();
+      }}
+      zoomToLayer={() => {
+        zoomToLayer();
       }}
     />
   );

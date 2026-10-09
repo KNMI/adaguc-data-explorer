@@ -8,13 +8,13 @@ import '../assets/styles.css';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { Grid, Paper, TextField } from '@mui/material';
-import { MapView, MapViewLayer } from '@opengeoweb/webmap-react';
 import {
-  LayerType,
-  WMBBOX,
-  generateMapId,
-  getWMJSMapById,
-} from '@opengeoweb/webmap';
+  OpenLayersLayer,
+  OpenLayersMapView,
+  makeView,
+  setViewFromExtent,
+} from '@opengeoweb/webmap-react';
+import { LayerType, WMBBOX, generateMapId } from '@opengeoweb/webmap';
 import { baseLayerWorldMap } from '../utils/layerDefinitions';
 
 export interface DataElementType {
@@ -34,9 +34,16 @@ interface DataElementProps extends DataElementType {
 const DataElement = (
   element: DataElementProps,
 ): React.ReactElement<DataElementProps> => {
-  const { title, subtitle, handleAddData, layer, service, bbox } = element;
+  const { title, subtitle, handleAddData, layer, service, srs, bbox } = element;
 
   const mapId = React.useRef<string>(generateMapId()).current;
+  const view = React.useMemo(() => {
+    const newView = makeView(srs || 'EPSG:3857');
+    if (bbox) {
+      setViewFromExtent(newView, new WMBBOX(bbox));
+    }
+    return newView;
+  }, [srs, bbox]);
   return (
     <Grid item style={{ display: 'inline' }}>
       <IconButton
@@ -55,26 +62,15 @@ const DataElement = (
               zIndex: 0,
             }}
           >
-            <MapView
-              mapId={mapId}
-              passiveMap
-              controls={{ zoomControls: false }}
-              bbox={new WMBBOX(bbox)}
-              showScaleBar={false}
-              showLayerInfo={false}
-              onWMJSMount={(dmapId) => {
-                const webmapjs = getWMJSMapById(dmapId);
-                webmapjs.hideMouseCursorProperties();
-              }}
-            >
-              <MapViewLayer {...baseLayerWorldMap} />
-              <MapViewLayer
+            <OpenLayersMapView mapId={mapId} view={view} passiveMap>
+              <OpenLayersLayer {...baseLayerWorldMap} />
+              <OpenLayersLayer
                 id={mapId + layer + service}
                 service={service}
                 name={layer}
-                type={LayerType.mapLayer}
+                layerType={LayerType.mapLayer}
               />
-            </MapView>
+            </OpenLayersMapView>
           </div>
 
           <div

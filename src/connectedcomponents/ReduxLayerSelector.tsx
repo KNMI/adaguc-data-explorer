@@ -23,23 +23,21 @@ const ReduxLayerSelector = (): React.ReactElement => {
   );
 
   // Local state for tracking which layer was selected
-  const [layer, setLayer] = React.useState<LayerProps | null>(null);
+  const [layerName, setLayerName] = React.useState<string | null>(null);
 
   // Set first layer as default
   React.useEffect(() => {
-    if (layer === null && availableLayers.length > 0) {
-      setLayer(availableLayers[0]);
+    if (layerName === null && availableLayers.length > 0) {
+      setLayerName(availableLayers[0].name);
     }
   }, [availableLayers]);
-  console.log('!');
+
   return (
     <WMSLayerSelector
-      // layer={layer}
-      // layers={availableLayers}
-      layerName={layer.name}
+      layerName={layerName}
       serviceUrl={service}
-      onSelectLayer={(selectedLayer) => {
-        setLayer(selectedLayer);
+      onSelectLayer={(selectedLayerName) => {
+        setLayerName(selectedLayerName);
       }}
     />
   );

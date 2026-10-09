@@ -4,6 +4,8 @@ import CloseIcon from '@mui/icons-material/Close';
 
 import { makePermaLink } from './handleWindowLocationQueryString';
 import { CopyToClipBoard } from './CopyToClipBoard';
+import { useAppSelector } from '../store/store';
+import { ViewerState, AdagucMap } from '../store/types';
 
 interface AdagucCreatePermalinkDialogProps {
   isDialogOpen: boolean;
@@ -13,7 +15,10 @@ const AdagucCreatePermalinkDialog = ({
   isDialogOpen,
   onDialogOpen,
 }: AdagucCreatePermalinkDialogProps): React.ReactElement => {
-  const link = makePermaLink('map1');
+  const map = useAppSelector(
+    (state: ViewerState): AdagucMap => state?.viewer?.maps.map1,
+  );
+  const link = makePermaLink('map1', map);
 
   return (
     <Dialog

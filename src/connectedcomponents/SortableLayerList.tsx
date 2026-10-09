@@ -5,6 +5,7 @@ import { selectors } from '../store/selectors';
 import { ViewerState } from '../store/types';
 import { ReduxLayerComponent } from './ReduxLayerComponent';
 import LayerDetailDialog from './LayerDetailsComponent/LayerDetailDialog';
+import { ErrorBoundary } from '../components/ErrorBoundary/ErrorBoundary';
 
 export interface SortableLayerListProps {
   mapId: string;
@@ -35,6 +36,7 @@ export const SortableLayerList = ({
       }}
     >
       <LayerDetailDialog
+        mapId={mapId}
         isDialogOpen={layerDetailsForLayerId !== null}
         layerId={layerDetailsForLayerId}
         onClose={() => {
@@ -54,15 +56,16 @@ export const SortableLayerList = ({
       >
         {layersInMap.map((layerId, k): React.ReactElement => {
           return (
-            <ReduxLayerComponent
-              key={layerId}
-              layerId={layerId}
-              mapId={mapId}
-              layerIndex={k}
-              openLayerDetails={(__layerId) => {
-                openlayerDetails(__layerId);
-              }}
-            />
+            <ErrorBoundary key={layerId} fallbackMessage="Layer unavailable">
+              <ReduxLayerComponent
+                layerId={layerId}
+                mapId={mapId}
+                layerIndex={k}
+                openLayerDetails={(__layerId) => {
+                  openlayerDetails(__layerId);
+                }}
+              />
+            </ErrorBoundary>
           );
         })}
       </ReactSortable>

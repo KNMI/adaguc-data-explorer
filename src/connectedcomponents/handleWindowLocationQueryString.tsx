@@ -1,6 +1,9 @@
-import { URLEncode, WMBBOX, getWMJSMapById } from '@opengeoweb/webmap';
+import { WMBBOX, getWMLayerById } from '@opengeoweb/webmap';
 import { AppThunkDispatch, actions } from '../store/store';
 import { thunks } from '../store/thunks';
+import { AdagucMap } from '../store/types';
+
+const URLEncode = (value: string): string => encodeURIComponent(value);
 
 const addLayers = async (
   layerList: {
@@ -8,7 +11,7 @@ const addLayers = async (
     service: string;
     enabled: boolean;
     style: string;
-    opacity: string;
+    opacity: number;
     format: string;
   }[],
   mapId: string,
@@ -48,8 +51,9 @@ export const handleWindowLocationQueryString = (
   const srs = lowerCaseUrlParams.get('srs');
   const bbox = lowerCaseUrlParams.get('bbox');
   if (srs && bbox) {
-    const map = getWMJSMapById(mapId);
-    map.setProjection({ srs, bbox: new WMBBOX(bbox) });
+    dispatch(
+      actions.requestSetProjection({ mapId, srs, bbox: new WMBBOX(bbox) }),
+    );
   }
 
   const services = lowerCaseUrlParams.get('service')?.split(',');
@@ -63,7 +67,7 @@ export const handleWindowLocationQueryString = (
         const layerFormat = layerProps[1];
         const layerEnabled = layerProps[2] !== 'false';
         const layerStyle = layerProps[3];
-        const layerOpacity = layerProps[4];
+        const layerOpacity = parseFloat(layerProps[4]);
         const layerServiceIndex = parseInt(`${layerProps[5]}`, 10);
         if (layerServiceIndex < services.length) {
           return {
@@ -85,8 +89,6 @@ export const handleWindowLocationQueryString = (
         dims.forEach((dim) => {
           const time = dim.split('$');
           if (time && time.length === 2) {
-            const map = getWMJSMapById(mapId);
-            map.setDimension(time[0], time[1]);
             const dimensionName = time[0];
             const dimensionValue = time[1];
             dispatch(
@@ -104,38 +106,40 @@ export const handleWindowLocationQueryString = (
   }
 };
 
-export const makePermaLink = (mapId: string): string => {
-  const webmap = getWMJSMapById(mapId);
-  if (!webmap) return '';
+export const makePermaLink = (mapId: string, map: AdagucMap): string => {
+  if (!map) return '';
   const currentOrigin = window.location.origin;
-  const { srs } = webmap.getProjection();
-  const bbox = webmap.getBBOX();
+  const { srs, bbox } = map.view;
   const projectionLink = `srs=${URLEncode(srs)}&bbox=${bbox.left},${bbox.bottom},${bbox.right},${bbox.top}`;
-  const layers = webmap.getLayers();
+  const { layers } = map;
   const serviceMap = new Set<string>();
   layers.forEach((layer) => {
-    serviceMap.add(layer.service);
+    serviceMap.add(layer.serviceUrl);
   });
   const serviceLink = `service=${URLEncode(Array.from(serviceMap).join(','))}`;
   const layersLink = layers
     .map((layer) => {
       const layerName = layer.name;
-      const layerFormat = layer.format;
+      const wmLayer = getWMLayerById(layer.id);
+      const layerFormat = wmLayer?.format || '';
       const layerEnabled = layer.enabled ? 'true' : 'false';
-      const layerStyle = layer.getStyle();
+      const layerStyle = layer.style;
       const layerOpacity = layer.opacity;
       const layerServiceIndex = Array.from(serviceMap).findIndex(
-        (item) => item === layer.service,
+        (item) => item === layer.serviceUrl,
       );
       return `${URLEncode(layerName)}$${URLEncode(layerFormat)}$${layerEnabled}$${URLEncode(layerStyle)}$${layerOpacity}$${layerServiceIndex}`;
     })
     .join(',');
 
-  const dimsLink = webmap
-    .getDimensionList()
-    .map((dim) => {
-      return `${dim.name}$${dim.currentValue}`;
-    })
+  const dimsMap = new Map<string, string>();
+  layers.forEach((layer) => {
+    layer.dimensions.forEach((dim) => {
+      dimsMap.set(dim.name, dim.currentValue);
+    });
+  });
+  const dimsLink = Array.from(dimsMap.entries())
+    .map(([name, currentValue]) => `${name}$${currentValue}`)
     .join(',');
   return `${currentOrigin}?${projectionLink}&${serviceLink}&layer=${layersLink}&selected=0&dims=${dimsLink}`;
 };

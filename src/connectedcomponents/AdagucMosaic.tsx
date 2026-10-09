@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { Mosaic } from 'react-mosaic-component';
+import { Mosaic, MosaicNode } from 'react-mosaic-component';
 
 export interface AdagucMosaicProps {
-  mosaicItems: { [viewId: string]: JSX.Element };
+  mosaicItems: { [viewId: string]: React.ReactElement };
   collapseAutoWMS: boolean;
 }
 export const AdagucMosaic = ({
@@ -24,29 +24,43 @@ export const AdagucMosaic = ({
     100 - (30 / (screenWidth - layerPanelWidth)) * 100;
 
   return React.useMemo(() => {
+    const autoWMSSplitPercentage = collapseAutoWMS
+      ? autoWMSPanelWidthPercentage
+      : autoWMSPanelWidthPercentageCollapsed;
+    const initialValue: MosaicNode<string> = {
+      type: 'split',
+      direction: 'column',
+      splitPercentages: [0, 100],
+      children: [
+        'a',
+        {
+          type: 'split',
+          direction: 'row',
+          splitPercentages: [
+            leftPanelWidthPercentage,
+            100 - leftPanelWidthPercentage,
+          ],
+          children: [
+            'b',
+            {
+              type: 'split',
+              direction: 'row',
+              splitPercentages: [
+                autoWMSSplitPercentage,
+                100 - autoWMSSplitPercentage,
+              ],
+              children: ['c', 'd'],
+            },
+          ],
+        },
+      ],
+    };
     return (
       <Mosaic<string>
         renderTile={(id) => {
           return mosaicItems[id];
         }}
-        initialValue={{
-          direction: 'column',
-          first: 'a',
-          second: {
-            direction: 'row',
-            first: 'b',
-            second: {
-              direction: 'row',
-              first: 'c',
-              second: 'd',
-              splitPercentage: collapseAutoWMS
-                ? autoWMSPanelWidthPercentage
-                : autoWMSPanelWidthPercentageCollapsed,
-            },
-            splitPercentage: leftPanelWidthPercentage,
-          },
-          splitPercentage: 0,
-        }}
+        initialValue={initialValue}
       />
     );
   }, [collapseAutoWMS]);

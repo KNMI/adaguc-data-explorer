@@ -9,7 +9,7 @@ export interface AddLayerInterface {
   name: string;
   serviceUrl: string;
   enabled?: boolean;
-  opacity?: string;
+  opacity?: number;
   styleName?: string;
 }
 
@@ -57,7 +57,7 @@ export const addLayer = createAsyncThunk(
       style: styleName,
     });
 
-    await wmLayer.parseLayerPromise();
+    await wmLayer.parseLayer();
 
     wmLayer.enabled = enabled;
     if (styleName && styleName.length > 0) {

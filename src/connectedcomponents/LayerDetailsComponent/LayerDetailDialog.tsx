@@ -5,11 +5,13 @@ import { getWMLayerById } from '@opengeoweb/webmap';
 import LayerDetailsComponent from './LayerDetailsComponent';
 
 interface LayerDetailDialogProps {
+  mapId: string;
   isDialogOpen: boolean;
   layerId: string;
   onClose: () => void;
 }
 const LayerDetailDialog = ({
+  mapId,
   isDialogOpen,
   layerId,
   onClose,
@@ -43,7 +45,7 @@ const LayerDetailDialog = ({
         <CloseIcon />
       </IconButton>
       <DialogContent style={{ maxHeight: '60vh', maxWidth: '60vw' }}>
-        <LayerDetailsComponent layerId={layerId} />
+        <LayerDetailsComponent mapId={mapId} layerId={layerId} />
       </DialogContent>
     </Popper>
   );

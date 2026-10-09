@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-import * as DOMPurify from 'dompurify';
+import DOMPurify from 'dompurify';
 
 const sanitizeHTML = (
   htmlToBeSanitezed: string,

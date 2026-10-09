@@ -30,7 +30,7 @@ const ReduxMap = (): React.ReactElement => {
     handleWindowLocationQueryString(mapId, dispatch);
   }, []);
 
-  const mosaicItems: { [viewId: string]: JSX.Element } = {
+  const mosaicItems: { [viewId: string]: React.ReactElement } = {
     a: <div />,
     b: (
       <div>
