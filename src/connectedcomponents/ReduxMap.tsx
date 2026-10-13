@@ -26,12 +26,17 @@ const ReduxMap = (): React.ReactElement => {
 
   // Set first layer as default
   React.useEffect(() => {
+    // On a fresh load, maps[mapId] doesn't exist yet - it's otherwise only
+    // ever created as a side effect of a layer finishing being added - so
+    // without this, removeAllLayers and the srs/bbox from the URL (both
+    // dispatched synchronously below, before any layer has been added) are
+    // silently dropped by reducers that bail out when the map isn't there.
+    dispatch(actions.registerMap({ mapId }));
     dispatch(actions.removeAllLayers({ mapId }));
     handleWindowLocationQueryString(mapId, dispatch);
   }, []);
 
   const mosaicItems: { [viewId: string]: React.ReactElement } = {
-    a: <div />,
     b: (
       <div>
         <SortableLayerList mapId={mapId} />
@@ -65,7 +70,13 @@ const ReduxMap = (): React.ReactElement => {
           overflow: 'hidden',
         }}
       >
-        <div style={{ height: '60px' }}>
+        {/* No explicit height here: the toolbar's own minHeight (see
+            AdagucAppBar) is the only source of truth for the header's
+            height. Pinning this wrapper to a separate fixed height too
+            left a gap below the AppBar whenever the two didn't match
+            exactly, showing the theme's grey body background through it
+            as a thin bar. */}
+        <div>
           <AdagucAppBar />
         </div>
         <div style={{ flex: 1 }}>

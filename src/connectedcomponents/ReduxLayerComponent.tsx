@@ -41,6 +41,7 @@ export const ReduxLayerComponent = ({
         enabled: layer.enabled,
         opacity: layer.opacity,
         dimensions: layer.dimensions.map((dimension) => ({ ...dimension })),
+        hasError: layer.hasError,
       }),
     );
   };

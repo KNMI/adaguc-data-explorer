@@ -109,6 +109,18 @@ export const reducers = {
     };
     return draftState;
   },
+  requestAutoWMSService: (
+    draftState: AdagucMapsState,
+    action: { payload: { service: string } },
+  ): AdagucMapsState => {
+    const { service } = action.payload;
+    viewCommandRequestCounter += 1;
+    draftState.autoWMSServiceCommand = {
+      service,
+      requestId: viewCommandRequestCounter,
+    };
+    return draftState;
+  },
   requestZoomToLayer: (
     draftState: AdagucMapsState,
     action: { payload: { mapId: string; layerId: string } },
@@ -132,10 +144,11 @@ export const reducers = {
     if (!draftState.maps[mapId]) {
       return draftState;
     }
+    // Deliberately keeps mapPinLocation on deactivate: both GetFeatureInfo
+    // and TimeSeries read it, and switching between those tabs toggles
+    // this flag without the pin itself having moved - clearing it would
+    // erase whichever of them isn't currently in front.
     draftState.maps[mapId].isGetFeatureInfoActive = active;
-    if (!active) {
-      draftState.maps[mapId].mapPinLocation = undefined;
-    }
     return draftState;
   },
   setMapPinLocation: (
@@ -295,6 +308,29 @@ export const reducers = {
       }
     });
   },
+  // Mirrors the layer's own time-animation step back into redux, so the
+  // sidebar's time slider (which reads the layer's redux-tracked
+  // dimensions) follows along. Deliberately doesn't touch isAnimating or
+  // link other layers like changeLayerDimension does: this fires on every
+  // animation tick, and either of those would fight the animation itself.
+  syncAnimatedLayerDimension: (
+    draftState: AdagucMapsState,
+    action: {
+      payload: {
+        mapId: string;
+        layerIndex: number;
+        dimensionName: string;
+        dimensionValue: string;
+      };
+    },
+  ): AdagucMapsState => {
+    const { mapId, layerIndex, dimensionName, dimensionValue } = action.payload;
+    const draftLayer = getReduxLayer(draftState, mapId, layerIndex);
+    if (!draftLayer) {
+      return;
+    }
+    setDimensionForReduxLayer(draftLayer, dimensionName, dimensionValue);
+  },
   fullFillfetchWMSService: (
     draftState: AdagucMapsState,
     action: { payload: AdagucService },
@@ -321,24 +357,29 @@ export const reducers = {
       enabled,
       styleName,
       opacity,
+      hasError,
     } = action.payload;
     const layers = selectors.getAvailableLayers(
       { viewer: draftState },
       serviceUrl,
     );
     const layer = layers.find((layeri) => layeri.name === name);
-    if (layer) {
-      draftState.maps[mapId].layers.unshift({
-        name,
-        enabled: enabled ?? true,
-        serviceUrl,
-        id,
-        style: styleName || layer.styles[0]?.name,
-        dimensions,
-        opacity: opacity || 1,
-        isReady: false,
-      });
-    }
+    // Add the layer even when it isn't (yet) in the available-layers list:
+    // some services don't enumerate their layers via GetCapabilities even
+    // though the layer itself works fine, and a layer the service
+    // genuinely doesn't have should still show up in the layer list
+    // rather than vanish silently, so the user can see what was requested.
+    draftState.maps[mapId].layers.unshift({
+      name,
+      enabled: enabled ?? true,
+      serviceUrl,
+      id,
+      style: styleName || layer?.styles[0]?.name || '',
+      dimensions,
+      opacity: opacity || 1,
+      isReady: false,
+      hasError,
+    });
   },
   // Called once a layer's WMS capabilities have been parsed (via
   // OpenLayersLayer's onInitializeLayer), to keep redux's dimensions/style

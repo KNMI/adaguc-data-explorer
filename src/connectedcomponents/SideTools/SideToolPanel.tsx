@@ -2,11 +2,13 @@
 import * as React from 'react';
 import { Button, IconButton, Tooltip } from '@mui/material';
 import { ArrowForwardIos, ArrowBackIos } from '@mui/icons-material';
-import { useAppDispatch } from '../../store/store';
+import { actions, useAppDispatch, useAppSelector } from '../../store/store';
+import { ViewerState } from '../../store/types';
 import AutoWMS from './AutoWMS';
 import { thunks } from '../../store/thunks';
 import GetFeatureInfoPanel from './GetFeatureInfoPanel';
 import LegendPanel from './LegendPanel';
+import TimeSeriesPanel from './TimeSeriesPanel';
 
 export interface ToolPanelInterface {
   toggleExpandToolsPanel: (boolean) => void;
@@ -23,6 +25,37 @@ const SideToolPanel = ({
   const setTabPage = (value: string): void => {
     setTabPageState(value);
   };
+
+  // GetFeatureInfo and TimeSeries both act on a map-click pin, so this is
+  // the single place deciding whether that pin mode is on - owning it here
+  // (rather than having each of those panels toggle it from its own
+  // `active` prop) avoids a race where both panels' effects fire in the
+  // same render and whichever is declared last in the JSX below wins.
+  const isPinModeActive =
+    tabPage === 'GetFeatureInfo' || tabPage === 'TimeSeries';
+  React.useEffect(() => {
+    dispatch(
+      actions.setGetFeatureInfoActive({ mapId, active: isPinModeActive }),
+    );
+  }, [mapId, isPinModeActive, dispatch]);
+
+  const autoWMSServiceCommand = useAppSelector(
+    (state: ViewerState) => state?.viewer?.autoWMSServiceCommand,
+  );
+  // The top bar's "custom WMS service" field can send a service here (see
+  // AdagucAppBar) instead of adding a layer, when it looks like an AutoWMS
+  // explorer url - switch to this tab so the result is actually visible.
+  const lastAppliedAutoWMSRequestId = React.useRef<number>(0);
+  React.useEffect(() => {
+    if (
+      !autoWMSServiceCommand ||
+      autoWMSServiceCommand.requestId === lastAppliedAutoWMSRequestId.current
+    ) {
+      return;
+    }
+    lastAppliedAutoWMSRequestId.current = autoWMSServiceCommand.requestId;
+    setTabPage('AUTOWMS');
+  }, [autoWMSServiceCommand]);
 
   return (
     <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
@@ -102,6 +135,7 @@ const SideToolPanel = ({
       >
         <div style={{ display: tabPage === 'AUTOWMS' ? 'contents' : 'none' }}>
           <AutoWMS
+            externalServiceRequest={autoWMSServiceCommand}
             addLayer={(service: string, name: string): void => {
               dispatch(
                 thunks.addLayer({
@@ -114,9 +148,12 @@ const SideToolPanel = ({
           />
         </div>
         <div
-          style={{ display: tabPage === 'TimeSeries' ? 'contents' : 'none' }}
+          className="timeseries_panel_container"
+          style={{
+            display: tabPage === 'TimeSeries' ? 'block' : 'none',
+          }}
         >
-          Timeseries TBD
+          <TimeSeriesPanel mapId={mapId} />
         </div>
         <div
           className="getfeatureinfo_panel"
@@ -124,10 +161,7 @@ const SideToolPanel = ({
             display: tabPage === 'GetFeatureInfo' ? 'block' : 'none',
           }}
         >
-          <GetFeatureInfoPanel
-            mapId={mapId}
-            active={tabPage === 'GetFeatureInfo'}
-          />
+          <GetFeatureInfoPanel mapId={mapId} />
         </div>
         <div
           className="legend_panel_container"

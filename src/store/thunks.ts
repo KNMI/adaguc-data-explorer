@@ -22,6 +22,7 @@ export interface AddLayerInterfaceFulFilled {
   enabled?: boolean;
   opacity?: number;
   styleName?: string;
+  hasError?: boolean;
 }
 
 export const fetchWMSService = createAsyncThunk(
@@ -31,22 +32,55 @@ export const fetchWMSService = createAsyncThunk(
   },
 );
 
+// @opengeoweb/webmap's internal query client retries a failed request (e.g.
+// an unreachable service) 3 times with exponential backoff before giving
+// up, which can take much longer than this timeout to fail on its own.
+// Racing it against this instead lets addLayer fall back quickly (see
+// below) to still showing the layer, rather than leaving the UI looking
+// stuck for however long that retry chain takes.
+const ADD_LAYER_TIMEOUT_MS = 10000;
+
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Timed out after ${ms}ms`)),
+      ms,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+
 export const addLayer = createAsyncThunk(
   'maps/addLayer',
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async (payload: AddLayerInterface, thunkAPI) => {
-    const { dispatch, getState, rejectWithValue } = thunkAPI;
+    const { dispatch, getState } = thunkAPI;
     const { serviceUrl, name, mapId, enabled, styleName, opacity } = payload;
-    await dispatch(fetchWMSService(serviceUrl));
+    await withTimeout(
+      dispatch(fetchWMSService(serviceUrl)),
+      ADD_LAYER_TIMEOUT_MS,
+      // dispatching an async thunk never itself rejects (it always
+      // resolves to a fulfilled or rejected action) - only the timeout can
+      // reject here, and getAvailableLayers below already handles the
+      // service simply having no layers yet, the same as if it timed out.
+    ).catch(() => undefined);
     const layers = selectors.getAvailableLayers(getState(), serviceUrl);
 
-    if (layers.length === 0) {
-      return rejectWithValue('No layers in service');
-    }
-
+    // Trust an explicitly requested layer name (e.g. from a permalink)
+    // rather than requiring it to be listed by GetCapabilities first: some
+    // services don't enumerate their layers there even though the layer
+    // itself works fine, and a layer the service genuinely doesn't have
+    // should still show up in the layer list (if with empty dimensions)
+    // rather than vanish silently, so the user can see what was requested.
     const layerToFind = layers.find((layeri) => layeri.name === name);
-
-    const layerName = layerToFind ? name : layers[0].name;
+    const layerName = layerToFind ? name : (layers[0]?.name ?? name);
     const id = generateLayerId();
     const wmLayer = new WMLayer({
       id,
@@ -57,12 +91,27 @@ export const addLayer = createAsyncThunk(
       style: styleName,
     });
 
-    await wmLayer.parseLayer();
-
-    wmLayer.enabled = enabled;
-    if (styleName && styleName.length > 0) {
-      wmLayer.setStyle(styleName);
+    let dimensions: AdagucLayerDimension[] = [];
+    let hasError = false;
+    try {
+      await withTimeout(wmLayer.parseLayer(), ADD_LAYER_TIMEOUT_MS);
+      wmLayer.enabled = enabled;
+      if (styleName && styleName.length > 0) {
+        wmLayer.setStyle(styleName);
+      }
+      dimensions = wmLayer.dimensions.map((dim) => ({
+        name: dim.name,
+        currentValue: dim.currentValue,
+      }));
+    } catch (e) {
+      hasError = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Could not fully resolve layer "${layerName}" on ${serviceUrl}; adding it to the layer list anyway.`,
+        e,
+      );
     }
+
     return {
       name: layerName,
       enabled: enabled || true,
@@ -71,9 +120,8 @@ export const addLayer = createAsyncThunk(
       serviceUrl,
       mapId,
       id,
-      dimensions: wmLayer.dimensions.map((dim) => {
-        return { name: dim.name, currentValue: dim.currentValue };
-      }),
+      dimensions,
+      hasError,
     } as AddLayerInterfaceFulFilled;
   },
 );

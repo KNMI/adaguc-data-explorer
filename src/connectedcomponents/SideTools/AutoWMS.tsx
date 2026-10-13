@@ -4,11 +4,24 @@ import {
   queryWMSLayers,
   queryWMSServiceInfo,
 } from '@opengeoweb/webmap';
-import { IconButton, LinearProgress, TextField, Tooltip } from '@mui/material';
+import {
+  IconButton,
+  LinearProgress,
+  Skeleton,
+  TextField,
+  Tooltip,
+} from '@mui/material';
 import ArrowForwardSharp from '@mui/icons-material/ArrowForwardSharp';
+import InfoIcon from '@mui/icons-material/Info';
 import { CopyToClipBoard } from '../CopyToClipBoard';
+import AutoWMSLayerDetailsDialog from './AutoWMSLayerDetailsDialog';
+import { AdagucAutoWMSServiceCommand } from '../../store/types';
 
 const AUTOWMS_INPUT_DEBOUNCE_MS = 600;
+// Caps how many new preview images start loading per second, so opening a
+// service with many layers doesn't fire off a burst of GetMap requests all
+// at once.
+const MAX_PREVIEW_IMAGES_PER_SECOND = 5;
 
 interface AutoWMSResult {
   result: { path: string; name: string; leaf: boolean; adaguc?: string }[];
@@ -16,6 +29,12 @@ interface AutoWMSResult {
 
 interface AutoWMSProps {
   addLayer: (service: string, name: string) => void;
+  // Set when the top bar's "custom WMS service" field (see AdagucAppBar)
+  // is given a url that looks like an AutoWMS explorer endpoint rather
+  // than a plain OGC WMS one - opens it here instead of adding it as a
+  // layer.
+  // eslint-disable-next-line react/require-default-props
+  externalServiceRequest?: AdagucAutoWMSServiceCommand;
 }
 
 const isWMSService = (service: string): boolean => {
@@ -29,7 +48,10 @@ const makeGoodServiceLink = (service: string): string => {
   return service;
 };
 
-const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
+const AutoWMS = ({
+  addLayer,
+  externalServiceRequest,
+}: AutoWMSProps): React.ReactElement => {
   const lowerCaseUrlParams = new URLSearchParams(window.location.search);
 
   const serviceFromQueryString =
@@ -41,6 +63,9 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
   const [currentLeaf, changeLeaf] = React.useState<string>('');
   const [layers, setLayers] = React.useState<LayerProps[]>([]);
   const [wmsAbstract, setWMSAbstract] = React.useState<string>('');
+  const [detailsLayer, setDetailsLayer] = React.useState<LayerProps | null>(
+    null,
+  );
 
   // What is currently typed in the text field, updated on every keystroke.
   const [autoWMSServiceInput, setAutoWMSServiceInput] = React.useState<string>(
@@ -117,20 +142,43 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
     }, 100);
   };
 
-  const fetchNewAutoWMS = (): void => {
+  // Commits a service immediately, bypassing the debounce below, so the
+  // Enter key/Load button (and an externally requested service, see below)
+  // always fetch right away instead of waiting out a keystroke debounce
+  // meant for typing.
+  const loadAutoWMSService = (service: string): void => {
     setLayers([]);
     setResult({ result: [] });
     changePath('');
     changeLeaf('');
     setOGCWMSService('');
-    // Commit the typed value immediately, bypassing the debounce below, so
-    // Enter / the Load button always fetches right away.
-    setAutoWMSService(autoWMSServiceInput);
+    setAutoWMSServiceInput(service);
+    setAutoWMSService(service);
 
-    if (isWMSService(autoWMSServiceInput)) {
-      setOGCWMSService(autoWMSServiceInput);
+    if (isWMSService(service)) {
+      setOGCWMSService(service);
     }
   };
+
+  const fetchNewAutoWMS = (): void => {
+    loadAutoWMSService(autoWMSServiceInput);
+  };
+
+  // The top bar's "custom WMS service" field can send a service here (see
+  // AdagucAppBar/SideToolPanel) instead of adding it as a layer, when it
+  // looks like an AutoWMS explorer url - load it the same way Enter/Load
+  // would.
+  const lastAppliedExternalRequestId = React.useRef<number>(0);
+  React.useEffect(() => {
+    if (
+      !externalServiceRequest ||
+      externalServiceRequest.requestId === lastAppliedExternalRequestId.current
+    ) {
+      return;
+    }
+    lastAppliedExternalRequestId.current = externalServiceRequest.requestId;
+    loadAutoWMSService(externalServiceRequest.service);
+  }, [externalServiceRequest]);
 
   // Debounce typing: only commit (and thus fetch) once the user pauses,
   // instead of on every keystroke.
@@ -151,6 +199,32 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
   React.useEffect(() => {
     fetchLayersFromOGCWMSService();
   }, [ogcWMSService]);
+
+  // Reveals (and so starts loading) at most MAX_PREVIEW_IMAGES_PER_SECOND
+  // new preview images per second, instead of all of them as soon as the
+  // layer list arrives.
+  const [visiblePreviewCount, setVisiblePreviewCount] = React.useState(0);
+  React.useEffect(() => {
+    setVisiblePreviewCount(
+      Math.min(MAX_PREVIEW_IMAGES_PER_SECOND, layers.length),
+    );
+    if (layers.length <= MAX_PREVIEW_IMAGES_PER_SECOND) {
+      return undefined;
+    }
+    const intervalId = window.setInterval(() => {
+      setVisiblePreviewCount((count) => {
+        const next = Math.min(
+          count + MAX_PREVIEW_IMAGES_PER_SECOND,
+          layers.length,
+        );
+        if (next >= layers.length) {
+          window.clearInterval(intervalId);
+        }
+        return next;
+      });
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [layers]);
 
   React.useEffect(() => {
     // eslint-disable-next-line no-void
@@ -222,6 +296,17 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
             <span className="autowms_app_layeritem_text">
               {layer.title} - ({layer.name})
             </span>
+            <Tooltip title="Layer details">
+              <IconButton
+                size="small"
+                aria-label="Layer details"
+                onClick={() => {
+                  setDetailsLayer(layer);
+                }}
+              >
+                <InfoIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <span
               className="autowms_app_layeritem_image"
               onClick={() => {
@@ -231,7 +316,11 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
               role="button"
               tabIndex={i + 1000}
             >
-              <img src={wmsImage} alt={layer.title} />
+              {i < visiblePreviewCount ? (
+                <img src={wmsImage} alt={layer.title} />
+              ) : (
+                <Skeleton variant="rectangular" width={250} height={250} />
+              )}
             </span>
           </div>
         );
@@ -321,6 +410,13 @@ const AutoWMS = ({ addLayer }: AutoWMSProps): React.ReactElement => {
       {autowmsWMSServiceHeader}
       {autowmsWMSService}
       {isLoading && <LinearProgress />}
+      <AutoWMSLayerDetailsDialog
+        serviceUrl={ogcWMSService}
+        layer={detailsLayer}
+        onClose={() => {
+          setDetailsLayer(null);
+        }}
+      />
     </div>
   );
 };

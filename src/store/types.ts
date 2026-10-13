@@ -22,6 +22,10 @@ export interface AdagucLayer {
   // otherwise never cause the layer panel to re-render and pick up the
   // live WMLayer instance (title, dimension ranges) it reads separately.
   isReady?: boolean;
+  // True when the add-layer flow couldn't fully resolve this layer (e.g.
+  // the service was unreachable, or doesn't have a layer by this name) -
+  // see thunks.addLayer. The layer is still added, just with no dimensions.
+  hasError?: boolean;
 }
 
 export interface AdagucService {
@@ -55,9 +59,20 @@ export interface AdagucMap {
   isGetFeatureInfoActive: boolean;
   mapPinLocation?: MapLocation;
 }
+export interface AdagucAutoWMSServiceCommand {
+  service: string;
+  requestId: number;
+}
+
 export interface AdagucMapsState {
   maps: Record<string, AdagucMap>;
   services: Record<string, AdagucService>;
+  // Not tied to a specific map: the AutoWMS panel is a single, global tool
+  // (see SideToolPanel) - set when the top bar's "custom WMS service" field
+  // is given a URL that looks like an AutoWMS explorer endpoint rather than
+  // a plain OGC WMS GetCapabilities url, so it opens there instead of being
+  // added as a map layer.
+  autoWMSServiceCommand?: AdagucAutoWMSServiceCommand;
 }
 
 export interface ViewerState {

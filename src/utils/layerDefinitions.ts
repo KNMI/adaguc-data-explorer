@@ -7,6 +7,7 @@ export const baseLayer = {
   layerType: LayerType.baseLayer,
   enabled: true,
   id: generateLayerId(),
+  zIndex: 0,
 };
 
 export const baseLayerWorldMap = {
@@ -16,8 +17,11 @@ export const baseLayerWorldMap = {
   layerType: LayerType.baseLayer,
   enabled: true,
   id: generateLayerId(),
+  zIndex: 0,
 };
 
+// Always above the data layers (see DATA_LAYER_BASE_ZINDEX in
+// ReduxMapViewComponent.tsx), regardless of how many of those there are.
 export const overlayLayer = {
   id: 'countryborder-airmet',
   name: 'countryborders',
@@ -25,4 +29,5 @@ export const overlayLayer = {
   format: 'image/png',
   enabled: true,
   service: 'https://geoservices.knmi.nl/wms?DATASET=baselayers&',
+  zIndex: 10000,
 };

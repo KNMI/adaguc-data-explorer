@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PlayIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
@@ -83,19 +84,26 @@ export const LayerComponent = ({
   );
 
   const cardActions = (
-    <Tooltip title="Remove this layer">
-      <IconButton
-        size="small"
-        edge="end"
-        color="inherit"
-        aria-label="menu"
-        onClick={() => {
-          removeLayer();
-        }}
-      >
-        <CloseIcon />
-      </IconButton>
-    </Tooltip>
+    <>
+      {layer?.hasError && (
+        <Tooltip title="Layer has an error">
+          <WarningAmberIcon color="warning" />
+        </Tooltip>
+      )}
+      <Tooltip title="Remove this layer">
+        <IconButton
+          size="small"
+          edge="end"
+          color="inherit"
+          aria-label="menu"
+          onClick={() => {
+            removeLayer();
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </Tooltip>
+    </>
   );
 
   return (

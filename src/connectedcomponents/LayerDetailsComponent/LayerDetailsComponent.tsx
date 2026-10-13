@@ -102,15 +102,15 @@ const LayerDetailsComponent = ({
           onChange={handleChange}
           aria-label="basic tabs example"
         >
-          <Tab label="WMS Color range" />
-          <Tab label="WMS Details" />
           <Tab label="Coordinate reference systems" />
+          <Tab label="WMS Details" />
           <Tab label="Adaguc NCDump" />
+          <Tab label="WMS Color range" />
         </Tabs>
       </Box>
       <Box sx={{ height: '100%' }}>
         <CustomTabPanel value={value} index={0}>
-          <WMSColorRangeSelector wmLayer={wmLayer} />
+          <ProjectionSelector mapId={mapId} wmLayer={wmLayer} />
         </CustomTabPanel>
         <CustomTabPanel value={value} index={1}>
           Details
@@ -145,10 +145,10 @@ const LayerDetailsComponent = ({
           </div>
         </CustomTabPanel>
         <CustomTabPanel value={value} index={2}>
-          <ProjectionSelector mapId={mapId} wmLayer={wmLayer} />
+          <AdagucNCDumpPanel wmLayer={wmLayer} />
         </CustomTabPanel>
         <CustomTabPanel value={value} index={3}>
-          <AdagucNCDumpPanel wmLayer={wmLayer} />
+          <WMSColorRangeSelector wmLayer={wmLayer} />
         </CustomTabPanel>
       </Box>
     </Box>

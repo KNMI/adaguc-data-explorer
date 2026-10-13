@@ -27,31 +27,28 @@ export const AdagucMosaic = ({
     const autoWMSSplitPercentage = collapseAutoWMS
       ? autoWMSPanelWidthPercentage
       : autoWMSPanelWidthPercentageCollapsed;
+    // Used to nest this under an extra, always-empty 'a' pane (0% height)
+    // in a column split - react-mosaic-component still renders that
+    // split's resize handle even at 0%, showing up as a thin gray bar
+    // between the top bar and the map. With nothing ever shown there,
+    // this is the mosaic's root directly instead.
     const initialValue: MosaicNode<string> = {
       type: 'split',
-      direction: 'column',
-      splitPercentages: [0, 100],
+      direction: 'row',
+      splitPercentages: [
+        leftPanelWidthPercentage,
+        100 - leftPanelWidthPercentage,
+      ],
       children: [
-        'a',
+        'b',
         {
           type: 'split',
           direction: 'row',
           splitPercentages: [
-            leftPanelWidthPercentage,
-            100 - leftPanelWidthPercentage,
+            autoWMSSplitPercentage,
+            100 - autoWMSSplitPercentage,
           ],
-          children: [
-            'b',
-            {
-              type: 'split',
-              direction: 'row',
-              splitPercentages: [
-                autoWMSSplitPercentage,
-                100 - autoWMSSplitPercentage,
-              ],
-              children: ['c', 'd'],
-            },
-          ],
+          children: ['c', 'd'],
         },
       ],
     };

@@ -57,7 +57,12 @@ const AdagucAddDataDialog = ({
         <CloseIcon />
       </IconButton>
       <DialogContent style={{ height: '70vh' }}>
-        <AddDataComponent handleAddData={handleAddData} />
+        <AddDataComponent
+          handleAddData={handleAddData}
+          onServiceHandled={() => {
+            onDialogOpen(false);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

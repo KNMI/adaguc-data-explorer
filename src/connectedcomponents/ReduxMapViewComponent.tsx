@@ -17,12 +17,19 @@ import { selectors } from '../store/selectors';
 import { AdagucLayer, AdagucMapView, ViewerState } from '../store/types';
 import { baseLayerWorldMap, overlayLayer } from '../utils/layerDefinitions';
 import { ReduxMapLayer } from './ReduxMapLayer';
+import { AnimationClock, AnimationTick } from './AnimationClock';
 import { ErrorBoundary } from '../components/ErrorBoundary/ErrorBoundary';
 
 export interface ReduxMapViewComponentProps {
   mapId: string;
   update: () => void;
 }
+
+// The layer list shows the topmost-drawn layer first, so it needs the
+// highest zIndex. Starting data layers above the base layer (zIndex 0) and
+// safely below the overlay (zIndex 10000, see layerDefinitions.ts) leaves
+// room for any reasonable number of layers in between.
+const DATA_LAYER_BASE_ZINDEX = 1;
 
 export const ReduxMapViewComponent = ({
   mapId,
@@ -53,11 +60,33 @@ export const ReduxMapViewComponent = ({
       state?.viewer?.maps[mapId]?.mapPinLocation,
   );
 
+  // Each animated layer used to run its own independent useAnimationForLayer
+  // timer; since those aren't synchronised with each other, layers visibly
+  // updated at slightly different moments. Driving every animated layer
+  // from a single shared tick (produced by one AnimationClock, for
+  // whichever layer is topmost with a time dimension) keeps them in
+  // lockstep, since they all then re-render from the same state update.
+  const animationClockLayer = mapLayers.find((layer) =>
+    getWMLayerById(layer.id)?.getDimension('time'),
+  );
+  const [animationTick, setAnimationTick] =
+    React.useState<AnimationTick | null>(null);
+
+  // Drop any tick left over from the previous run, so a fresh AnimationClock
+  // mount (keyed below) starts every layer from a clean, untouched state
+  // instead of one frame of the old animation.
+  React.useEffect(() => {
+    if (!isAnimating) {
+      setAnimationTick(null);
+    }
+  }, [isAnimating]);
+
   const [view, setView] = React.useState<View>(() =>
     makeView(mapView?.srs || 'EPSG:3857'),
   );
   const lastAppliedViewCommandId = React.useRef<number>(0);
   const lastAppliedZoomCommandId = React.useRef<number>(0);
+  const pendingFitBbox = React.useRef<AdagucMapView['bbox'] | null>(null);
 
   React.useEffect(() => {
     if (
@@ -67,10 +96,23 @@ export const ReduxMapViewComponent = ({
       return;
     }
     lastAppliedViewCommandId.current = viewCommand.requestId;
-    const newView = makeView(viewCommand.srs);
-    setViewFromExtent(newView, viewCommand.bbox);
-    setView(newView);
+    // Fitting the extent here, before this view is attached to the map,
+    // would use the view's default (and wrong) assumed viewport size of
+    // 100x100 - defer it to the effect below instead, which (as a parent
+    // effect) runs after OpenLayersMapView's own effect has attached this
+    // view to the map via map.setView(), which is what gives it its real
+    // size.
+    pendingFitBbox.current = viewCommand.bbox;
+    setView(makeView(viewCommand.srs));
   }, [viewCommand]);
+
+  React.useEffect(() => {
+    if (!pendingFitBbox.current) {
+      return;
+    }
+    setViewFromExtent(view, pendingFitBbox.current);
+    pendingFitBbox.current = null;
+  }, [view]);
 
   React.useEffect(() => {
     if (
@@ -119,8 +161,15 @@ export const ReduxMapViewComponent = ({
 
   return (
     <OpenLayersMapView view={view} mapId={mapId}>
+      {isAnimating && animationClockLayer && (
+        <AnimationClock
+          key={animationClockLayer.id}
+          layer={animationClockLayer}
+          onTick={setAnimationTick}
+        />
+      )}
       <OpenLayersLayer {...baseLayerWorldMap} />
-      {mapLayers.map((layer) => {
+      {mapLayers.map((layer, index) => {
         return (
           <ErrorBoundary
             key={layer.id}
@@ -134,7 +183,13 @@ export const ReduxMapViewComponent = ({
           >
             <ReduxMapLayer
               layer={layer}
+              mapId={mapId}
+              layerIndex={index}
+              // mapLayers[0] is the top of the layer list, so it gets the
+              // highest zIndex among the data layers.
+              zIndex={DATA_LAYER_BASE_ZINDEX + mapLayers.length - 1 - index}
               isAnimating={isAnimating}
+              animationTick={animationTick}
               onLayerReady={() => {
                 update();
               }}

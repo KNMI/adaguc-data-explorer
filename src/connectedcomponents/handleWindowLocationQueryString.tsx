@@ -1,9 +1,24 @@
-import { WMBBOX, getWMLayerById } from '@opengeoweb/webmap';
+import { Bbox, getWMLayerById } from '@opengeoweb/webmap';
 import { AppThunkDispatch, actions } from '../store/store';
 import { thunks } from '../store/thunks';
 import { AdagucMap } from '../store/types';
 
 const URLEncode = (value: string): string => encodeURIComponent(value);
+
+// Parses the "left,bottom,right,top" string makePermaLink produces, into a
+// plain Bbox object. Deliberately not a WMBBOX instance: its bound methods
+// make it a class instance rather than a plain object, which Redux (and
+// the Redux DevTools extension, which structured-clones every dispatched
+// action) can't serialize - that clone failure stops the dispatch dead, so
+// none of the code after it (adding the layers from the same URL) runs.
+const parseBbox = (value: string): Bbox | undefined => {
+  const parts = value.split(',').map(Number);
+  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) {
+    return undefined;
+  }
+  const [left, bottom, right, top] = parts;
+  return { left, bottom, right, top };
+};
 
 const addLayers = async (
   layerList: {
@@ -29,6 +44,7 @@ const addLayers = async (
           name: layer.name,
           enabled: layer.enabled,
           opacity: layer.opacity,
+          styleName: layer.style,
         }),
       )
         .unwrap()
@@ -50,10 +66,9 @@ export const handleWindowLocationQueryString = (
 
   const srs = lowerCaseUrlParams.get('srs');
   const bbox = lowerCaseUrlParams.get('bbox');
-  if (srs && bbox) {
-    dispatch(
-      actions.requestSetProjection({ mapId, srs, bbox: new WMBBOX(bbox) }),
-    );
+  const parsedBbox = bbox && parseBbox(bbox);
+  if (srs && parsedBbox) {
+    dispatch(actions.requestSetProjection({ mapId, srs, bbox: parsedBbox }));
   }
 
   const services = lowerCaseUrlParams.get('service')?.split(',');

@@ -4,7 +4,7 @@ import * as React from 'react';
 import { MapLocation } from '@opengeoweb/webmap-react';
 import 'react-mosaic-component/react-mosaic-component.css';
 import '../../assets/styles.css';
-import { actions, useAppDispatch, useAppSelector } from '../../store/store';
+import { useAppSelector } from '../../store/store';
 import { selectors } from '../../store/selectors';
 import { AdagucLayer, ViewerState } from '../../store/types';
 import { getFeatureInfoUrl } from '../../utils/getFeatureInfoUrl';
@@ -12,13 +12,10 @@ import sanitizeHTML from '../../utils/sanitizeHTML';
 
 export interface GetFeatureInfoPanelProps {
   mapId: string;
-  active: boolean;
 }
 const GetFeatureInfoPanel = ({
   mapId,
-  active,
 }: GetFeatureInfoPanelProps): React.ReactElement => {
-  const dispatch = useAppDispatch();
   const results = React.useRef(new Map<string, string>()).current;
 
   const [, setCount] = React.useState(0);
@@ -31,12 +28,12 @@ const GetFeatureInfoPanel = ({
       state?.viewer?.maps[mapId]?.mapPinLocation,
   );
 
+  // Not gated on whether this tab is the one currently shown: it and
+  // TimeSeries share the same map-click pin, so fetching here whenever the
+  // pin moves (even from the other panel) keeps this ready instead of
+  // refetching/flashing every time the user switches tabs back to it.
   React.useEffect(() => {
-    dispatch(actions.setGetFeatureInfoActive({ mapId, active }));
-  }, [mapId, active, dispatch]);
-
-  React.useEffect(() => {
-    if (!active || !mapPinLocation) {
+    if (!mapPinLocation) {
       return;
     }
     results.clear();
@@ -61,7 +58,7 @@ const GetFeatureInfoPanel = ({
           });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, mapPinLocation, layers]);
+  }, [mapPinLocation, layers]);
 
   return (
     <div>

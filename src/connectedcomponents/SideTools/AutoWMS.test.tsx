@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import type { LayerProps, WMSServiceInfo } from '@opengeoweb/webmap';
 import { queryWMSLayers, queryWMSServiceInfo } from '@opengeoweb/webmap';
@@ -194,6 +195,91 @@ describe('AutoWMS', () => {
     expect(addLayer).toHaveBeenCalledWith(WMS_URL, 'layer1');
   });
 
+  it('shows and hides the layer details popup without adding the layer', async () => {
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([
+      {
+        name: 'layer1',
+        title: 'Layer One',
+        abstract: 'A detailed layer abstract',
+        styles: [{ name: 'default', title: 'Default style' }],
+      } as unknown as LayerProps,
+    ]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: 'Test abstract',
+    } as unknown as WMSServiceInfo);
+
+    const addLayer = jest.fn();
+    render(<AutoWMS addLayer={addLayer} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: WMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'menu' }));
+
+    expect(await screen.findByText(/Layer One/)).toBeInTheDocument();
+    expect(
+      screen.queryByText('A detailed layer abstract'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Layer details'));
+
+    // Scoped to the readable summary (not the JSON dump alongside it, which
+    // repeats the same text and would otherwise match ambiguously too).
+    const summary = within(await screen.findByTestId('layer-details-summary'));
+    expect(summary.getByText(/A detailed layer abstract/)).toBeInTheDocument();
+    expect(summary.getByText(/Default style/)).toBeInTheDocument();
+    // Opening the details popup must not also add the layer.
+    expect(addLayer).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText('close'));
+    expect(
+      screen.queryByText('A detailed layer abstract'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('loads preview images at most 5 per second', async () => {
+    jest.useFakeTimers();
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const sevenLayers = Array.from({ length: 7 }, (_, i) => ({
+      name: `layer${i + 1}`,
+      title: `Layer ${i + 1}`,
+      styles: [],
+    })) as unknown as LayerProps[];
+    mockQueryWMSLayers.mockResolvedValue(sevenLayers);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: '',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: WMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'menu' }));
+
+    await waitFor(() => {
+      expect(mockQueryWMSLayers).toHaveBeenCalled();
+    });
+
+    // All 7 layers are listed, but only the first 5 preview images should
+    // actually be loading (real <img> elements) a second in.
+    await waitFor(() => {
+      expect(screen.getByText(/Layer 7/)).toBeInTheDocument();
+    });
+    expect(screen.getAllByRole('img')).toHaveLength(5);
+
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('img')).toHaveLength(7);
+    });
+  });
+
   it('navigates into a subfolder of the AutoWMS explorer', async () => {
     const mockFetch = makeFetchMock((url) => {
       if (url === './config.json') {
@@ -229,5 +315,61 @@ describe('AutoWMS', () => {
     });
     expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
     await waitForLoadingToFinish();
+  });
+
+  it('loads an externally requested service, bypassing manual typing', async () => {
+    // Regression guard: the top bar's "custom WMS service" field (see
+    // AdagucAppBar/SideToolPanel) can send a service here directly - it
+    // must populate the input and fetch it immediately, the same as
+    // pressing Enter would.
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    const { rerender } = render(
+      <AutoWMS addLayer={jest.fn()} externalServiceRequest={undefined} />,
+    );
+    await flushConfigFetch(mockFetch);
+    mockFetch.mockClear();
+
+    rerender(
+      <AutoWMS
+        addLayer={jest.fn()}
+        externalServiceRequest={{ service: AUTOWMS_URL, requestId: 1 }}
+      />,
+    );
+
+    expect(screen.getByLabelText('Add AutoWMS or WMS service')).toHaveValue(
+      AUTOWMS_URL,
+    );
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${AUTOWMS_URL}request=getfiles&path=`,
+      );
+    });
+    await waitForLoadingToFinish();
+  });
+
+  it('does not reload when the same service request is seen again', async () => {
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    const request = { service: AUTOWMS_URL, requestId: 1 };
+    const { rerender } = render(
+      <AutoWMS addLayer={jest.fn()} externalServiceRequest={request} />,
+    );
+    await flushConfigFetch(mockFetch);
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${AUTOWMS_URL}request=getfiles&path=`,
+      );
+    });
+    await waitForLoadingToFinish();
+    mockFetch.mockClear();
+
+    rerender(<AutoWMS addLayer={jest.fn()} externalServiceRequest={request} />);
+
+    expect(mockFetch).not.toHaveBeenCalledWith(
+      `${AUTOWMS_URL}request=getfiles&path=`,
+    );
   });
 });

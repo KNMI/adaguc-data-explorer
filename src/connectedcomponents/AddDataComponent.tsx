@@ -7,7 +7,7 @@ import '../assets/styles.css';
 
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import { Grid, Paper, TextField } from '@mui/material';
+import { Grid, Paper } from '@mui/material';
 import {
   OpenLayersLayer,
   OpenLayersMapView,
@@ -16,6 +16,7 @@ import {
 } from '@opengeoweb/webmap-react';
 import { LayerType, WMBBOX, generateMapId } from '@opengeoweb/webmap';
 import { baseLayerWorldMap } from '../utils/layerDefinitions';
+import WMSServiceInput from './WMSServiceInput';
 
 export interface DataElementType {
   title?: string;
@@ -101,9 +102,15 @@ const DataElement = (
 
 export interface AddDataComponentProps {
   handleAddData: (args: DataElementType) => void;
+  // Called once a url typed into the custom-service field has been
+  // successfully routed (added as a layer, or opened in the AutoWMS
+  // panel) - lets the dialog this is shown in close itself.
+  // eslint-disable-next-line react/require-default-props
+  onServiceHandled?: () => void;
 }
 const AddDataComponent = ({
   handleAddData,
+  onServiceHandled,
 }: AddDataComponentProps): React.ReactElement<AddDataComponentProps> => {
   const elements: DataElementType[] = [
     {
@@ -256,11 +263,6 @@ const AddDataComponent = ({
     },
   ];
 
-  const [textFieldValue, setTextFieldValue] = React.useState<string>('');
-
-  const handleAddWMSService = () => {
-    handleAddData({ service: textFieldValue });
-  };
   return (
     <ThemeWrapper>
       <Grid container style={{ display: 'flex' }}>
@@ -271,20 +273,10 @@ const AddDataComponent = ({
             height: '100px',
           }}
         >
-          <TextField
-            style={{ width: 'inherit' }}
-            id="outlined-basic"
-            label="Add custom WMS service"
-            variant="outlined"
-            value={textFieldValue}
-            onChange={(e) => {
-              setTextFieldValue(e.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                handleAddWMSService();
-              }
-            }}
+          <WMSServiceInput
+            placeholder="Add custom WMS or AutoWMS service"
+            sx={{ width: 'inherit' }}
+            onHandled={onServiceHandled}
           />
         </Grid>
         <Grid style={{ display: 'block' }}>

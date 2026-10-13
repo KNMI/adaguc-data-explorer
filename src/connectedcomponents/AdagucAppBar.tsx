@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { AppBar, Box, IconButton, Toolbar, Typography } from '@mui/material';
+import { AppBar, Box, IconButton, Toolbar } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import CreateLinkIcon from '@mui/icons-material/Link';
 import AdagucAddDataDialog from './AdagucAddDataDialog';
 import AdagucCreatePermalinkDialog from './AdagucCreatePermalinkDialog';
+import WMSServiceInput from './WMSServiceInput';
 
 const AdagucAppBar = (): React.ReactElement => {
   const [addDataDialogOpen, setAddDataDialogOpen] =
@@ -21,8 +22,15 @@ const AdagucAppBar = (): React.ReactElement => {
         isDialogOpen={createLinkDialogOpen}
         onDialogOpen={setCreateLinkDialogOpen}
       />
-      <AppBar position="static">
-        <Toolbar>
+      <AppBar position="static" elevation={0}>
+        {/* Toolbar's default height comes from theme.mixins.toolbar, which
+            sets its own minHeight at the "sm" breakpoint - a plain
+            minHeight here has equal CSS specificity and can lose to that
+            at desktop widths, leaving this bar shorter than intended (and
+            the fixed-height header wrapper around it showing a gap below
+            it). Repeating the override at "sm" too makes sure it wins at
+            every size. */}
+        <Toolbar sx={{ minHeight: { xs: '78px', sm: '78px' } }}>
           <IconButton
             size="large"
             edge="start"
@@ -35,7 +43,14 @@ const AdagucAppBar = (): React.ReactElement => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }} />
+          <WMSServiceInput
+            sx={{
+              flexGrow: 1,
+              mr: 2,
+              backgroundColor: 'background.paper',
+              borderRadius: 1,
+            }}
+          />
           <IconButton
             size="large"
             edge="start"

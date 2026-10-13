@@ -1,26 +1,44 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
-import { LayerType } from '@opengeoweb/webmap';
+import { LayerType, getWMLayerById } from '@opengeoweb/webmap';
 import {
   OnInitializeLayerProps,
   OpenLayersLayer,
   OpenLayersLayerProps,
-  useAnimationForLayer,
+  TimeContext,
+  TimeContextType,
 } from '@opengeoweb/webmap-react';
+import { actions, useAppDispatch } from '../store/store';
 import { AdagucLayer } from '../store/types';
+import { AnimationTick } from './AnimationClock';
+
+// Stable reference, since a fresh {} literal on every render would make
+// TimeContext.Provider's value prop "change" every render even when
+// nothing really did.
+const DEFAULT_TIME_CONTEXT: TimeContextType = {
+  isAnimating: false,
+  prefetchList: [],
+};
 
 export interface ReduxMapLayerProps {
   layer: AdagucLayer;
+  mapId: string;
+  layerIndex: number;
+  zIndex: number;
   isAnimating: boolean;
+  // The single shared animation step driving every animated layer (see
+  // AnimationClock/ReduxMapViewComponent) - null until its first tick, or
+  // whenever not animating.
+  animationTick: AnimationTick | null;
   onLayerReady: () => void;
   onLayerError: () => void;
   onInitializeLayer: (payload: OnInitializeLayerProps) => void;
 }
 
-const ANIMATION_INTERVAL_MS = 300;
-const ANIMATION_NUM_STEPS = 24;
-
-const getLayerProps = (layer: AdagucLayer): OpenLayersLayerProps => ({
+const getLayerProps = (
+  layer: AdagucLayer,
+  zIndex: number,
+): OpenLayersLayerProps => ({
   id: layer.id,
   service: layer.serviceUrl,
   style: layer.style,
@@ -29,61 +47,122 @@ const getLayerProps = (layer: AdagucLayer): OpenLayersLayerProps => ({
   layerType: LayerType.mapLayer,
   name: layer.name,
   dimensions: layer.dimensions,
+  zIndex,
 });
 
 interface InnerLayerProps {
   layer: AdagucLayer;
+  zIndex: number;
   onLayerReady: () => void;
   onLayerError: () => void;
   onInitializeLayer: (payload: OnInitializeLayerProps) => void;
 }
 
+interface AnimatedInnerLayerProps extends InnerLayerProps {
+  mapId: string;
+  layerIndex: number;
+  animationTick: AnimationTick | null;
+}
+
 // Renders the layer with its redux-tracked dimensions. Used whenever this
-// layer isn't animating, so it never mounts useAnimationForLayer, which
-// polls on its own interval regardless of whether its output is used.
+// layer isn't animating.
 const StaticMapLayer = ({
   layer,
+  zIndex,
   onLayerReady,
   onLayerError,
   onInitializeLayer,
 }: InnerLayerProps): React.ReactElement => (
   <OpenLayersLayer
-    {...getLayerProps(layer)}
+    {...getLayerProps(layer, zIndex)}
     onLayerReady={onLayerReady}
     onLayerError={onLayerError}
     onInitializeLayer={onInitializeLayer}
   />
 );
 
-// Renders the layer with time-animated dimensions, stepping through the
-// most recent time values on an interval.
+// Renders the layer following the shared animation tick, instead of
+// stepping through time on its own - see AnimationClock for why.
 const AnimatedMapLayer = ({
   layer,
+  mapId,
+  layerIndex,
+  zIndex,
+  animationTick,
   onLayerReady,
   onLayerError,
   onInitializeLayer,
-}: InnerLayerProps): React.ReactElement => {
-  const layerProps = getLayerProps(layer);
-  const { dimensions: animatedDimensions } = useAnimationForLayer(
-    layerProps,
-    ANIMATION_INTERVAL_MS,
-    ANIMATION_NUM_STEPS,
-  );
+}: AnimatedInnerLayerProps): React.ReactElement => {
+  const dispatch = useAppDispatch();
+  const layerProps = getLayerProps(layer, zIndex);
 
+  // The shared tick's time value comes from whichever layer drives the
+  // clock, which may have a different time resolution/range than this
+  // layer - snap it to this layer's own closest matching value, the same
+  // way getMapDimURL does for dimension overrides elsewhere.
+  const snappedTime = React.useMemo(() => {
+    if (!animationTick) {
+      return undefined;
+    }
+    const timeDimension = getWMLayerById(layer.id)?.getDimension('time');
+    return (
+      timeDimension?.getClosestValue(animationTick.time, true) ??
+      animationTick.time
+    );
+  }, [layer.id, animationTick]);
+
+  // useAnimationForLayer (used by the clock) only drives the map's own
+  // rendering - it never touches redux, so the sidebar's time slider
+  // (which reads the layer's redux-tracked dimensions) never reflected the
+  // animation. Mirroring the animated time back into redux here keeps it
+  // in sync. This can't use the regular changeLayerDimension action: its
+  // reducer always turns isAnimating off (correct for a user dragging the
+  // slider, but would stop the animation immediately if used to sync it).
+  React.useEffect(() => {
+    if (!snappedTime) {
+      return;
+    }
+    dispatch(
+      actions.syncAnimatedLayerDimension({
+        mapId,
+        layerIndex,
+        dimensionName: 'time',
+        dimensionValue: snappedTime,
+      }),
+    );
+  }, [snappedTime, dispatch, mapId, layerIndex]);
+
+  // TimeawareImageSourceWMSLayer (what OpenLayersLayer renders for a WMS
+  // layer) only prefetches upcoming animation frames when it reads
+  // isAnimating/prefetchList from this context - without a provider here,
+  // every tick fell back to a cold GetMap request instead of an
+  // already-cached tile, which is what made the animation feel slow.
   return (
-    <OpenLayersLayer
-      {...layerProps}
-      dimensions={animatedDimensions}
-      onLayerReady={onLayerReady}
-      onLayerError={onLayerError}
-      onInitializeLayer={onInitializeLayer}
-    />
+    <TimeContext.Provider
+      value={animationTick?.timeContext ?? DEFAULT_TIME_CONTEXT}
+    >
+      <OpenLayersLayer
+        {...layerProps}
+        dimensions={
+          snappedTime
+            ? [{ name: 'time', currentValue: snappedTime }]
+            : layerProps.dimensions
+        }
+        onLayerReady={onLayerReady}
+        onLayerError={onLayerError}
+        onInitializeLayer={onInitializeLayer}
+      />
+    </TimeContext.Provider>
   );
 };
 
 export const ReduxMapLayer = ({
   layer,
+  mapId,
+  layerIndex,
+  zIndex,
   isAnimating,
+  animationTick,
   onLayerReady,
   onLayerError,
   onInitializeLayer,
@@ -92,6 +171,10 @@ export const ReduxMapLayer = ({
     return (
       <AnimatedMapLayer
         layer={layer}
+        mapId={mapId}
+        layerIndex={layerIndex}
+        zIndex={zIndex}
+        animationTick={animationTick}
         onLayerReady={onLayerReady}
         onLayerError={onLayerError}
         onInitializeLayer={onInitializeLayer}
@@ -101,6 +184,7 @@ export const ReduxMapLayer = ({
   return (
     <StaticMapLayer
       layer={layer}
+      zIndex={zIndex}
       onLayerReady={onLayerReady}
       onLayerError={onLayerError}
       onInitializeLayer={onInitializeLayer}
