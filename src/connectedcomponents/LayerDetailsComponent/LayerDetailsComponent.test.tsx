@@ -1,0 +1,66 @@
+import * as React from 'react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { getWMLayerById, queryWMSLayers } from '@opengeoweb/webmap';
+import LayerDetailsComponent from './LayerDetailsComponent';
+
+jest.mock('@opengeoweb/webmap', () => ({
+  getWMLayerById: jest.fn(),
+  queryWMSLayers: jest.fn(),
+}));
+
+jest.mock('./ProjectionSelector', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+jest.mock('./AdagucNCDumpPanel', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+jest.mock('./WMSColorRangeSelector', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+let lastWCSPanelDialogProps:
+  { isOpen: boolean; onClose: () => void } | undefined;
+jest.mock('./WCSPanelDialog', () => ({
+  __esModule: true,
+  default: (props: { isOpen: boolean; onClose: () => void }) => {
+    lastWCSPanelDialogProps = props;
+    return props.isOpen ? <div data-testid="wcs-panel-dialog" /> : null;
+  },
+}));
+
+const mockGetWMLayerById = jest.mocked(getWMLayerById);
+const mockQueryWMSLayers = jest.mocked(queryWMSLayers);
+
+describe('LayerDetailsComponent', () => {
+  beforeEach(() => {
+    lastWCSPanelDialogProps = undefined;
+    mockQueryWMSLayers.mockResolvedValue([]);
+    mockGetWMLayerById.mockReturnValue({
+      id: 'layer-1',
+      name: 'air_pressure_msl',
+      title: 'Air pressure',
+      service: 'http://example.com/wms?',
+      dimensions: [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+  });
+
+  it('opens the WCS popup when the WCS button is clicked, and closes it again', () => {
+    render(<LayerDetailsComponent mapId="map1" layerId="layer-1" />);
+
+    expect(screen.queryByTestId('wcs-panel-dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'WCS' }));
+
+    expect(screen.getByTestId('wcs-panel-dialog')).toBeInTheDocument();
+
+    act(() => {
+      lastWCSPanelDialogProps?.onClose();
+    });
+
+    expect(screen.queryByTestId('wcs-panel-dialog')).not.toBeInTheDocument();
+  });
+});

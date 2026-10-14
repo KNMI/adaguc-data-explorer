@@ -4,10 +4,15 @@ WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-RUN npm ci 
+RUN npm ci
 #--only=production
 
 COPY . .
+
+# Fail the image build itself on any type error, lint error, or test
+RUN npx tsc --noEmit -p . \
+    && npm run lint \
+    && npm test -- --ci
 
 RUN npm run build
 

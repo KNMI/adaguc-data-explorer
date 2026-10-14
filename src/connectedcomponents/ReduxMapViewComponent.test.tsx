@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { act, render } from '@testing-library/react';
 import {
+  getLayerExtentForProjection,
   makeView,
   setViewFromExtent,
   useAnimationForLayer,
@@ -9,6 +10,13 @@ import { getWMLayerById } from '@opengeoweb/webmap';
 import { useAppDispatch, useAppSelector } from '../store/store';
 import { AdagucLayer, ViewerState } from '../store/types';
 import { ReduxMapViewComponent } from './ReduxMapViewComponent';
+
+// Pulls in ol/interaction/DragBox (ESM-only) - its own behaviour is covered
+// by OpenLayersHistogramBoxSelect's own test file instead.
+jest.mock('./OpenLayersHistogramBoxSelect', () => ({
+  __esModule: true,
+  default: () => null,
+}));
 
 jest.mock('@opengeoweb/webmap', () => ({
   getWMLayerById: jest.fn(),
@@ -93,6 +101,9 @@ jest.mock('../store/store', () => ({
 
 const mockMakeView = jest.mocked(makeView);
 const mockSetViewFromExtent = jest.mocked(setViewFromExtent);
+const mockGetLayerExtentForProjection = jest.mocked(
+  getLayerExtentForProjection,
+);
 const mockUseAnimationForLayer = jest.mocked(useAnimationForLayer);
 const mockGetWMLayerById = jest.mocked(getWMLayerById);
 const mockUseAppDispatch = jest.mocked(useAppDispatch);
@@ -134,10 +145,12 @@ describe('ReduxMapViewComponent', () => {
     mockState = {
       viewer: {
         services: {},
+        baseLayers: [],
         maps: {
           [mapId]: {
             isAnimating: false,
             isGetFeatureInfoActive: false,
+            isHistogramBoxSelectActive: false,
             layers: [],
             view: {
               srs: 'EPSG:3857',
@@ -197,6 +210,198 @@ describe('ReduxMapViewComponent', () => {
     expect(fittedBbox).toEqual(bbox);
   });
 
+  it('syncs the new srs/bbox to redux right after switching projections, without needing a later pan', () => {
+    // The map itself reads the live OL view directly, so it always shows
+    // the switch immediately - but redux (and so the permalink) previously
+    // only ever learned about it from a later 'change' event, which the
+    // fit triggered by the switch itself can fire before anything has
+    // subscribed to this new view, and which otherwise never fires again
+    // without the user panning/zooming afterwards.
+    const dispatchMock = jest.fn();
+    mockUseAppDispatch.mockReturnValue(dispatchMock);
+    mockMakeView.mockImplementationOnce(
+      () => makeFakeView() as ReturnType<typeof makeView>,
+    );
+    const fittedView = {
+      on: jest.fn(),
+      un: jest.fn(),
+      calculateExtent: jest.fn(() => [10, 20, 30, 40]),
+      getProjection: jest.fn(() => ({ getCode: () => 'EPSG:28992' })),
+    };
+    mockMakeView.mockImplementationOnce(
+      () => fittedView as unknown as ReturnType<typeof makeView>,
+    );
+
+    const { rerender } = render(
+      <ReduxMapViewComponent mapId={mapId} update={jest.fn()} />,
+    );
+    dispatchMock.mockClear();
+
+    act(() => {
+      mockState = {
+        ...mockState,
+        viewer: {
+          ...mockState.viewer,
+          maps: {
+            ...mockState.viewer.maps,
+            [mapId]: {
+              ...mockState.viewer.maps[mapId],
+              viewCommand: {
+                srs: 'EPSG:28992',
+                bbox: { left: 0, bottom: 0, right: 1, top: 1 },
+                requestId: 1,
+              },
+            },
+          },
+        },
+      };
+      rerender(<ReduxMapViewComponent mapId={mapId} update={jest.fn()} />);
+    });
+
+    expect(dispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          mapId,
+          view: {
+            srs: 'EPSG:28992',
+            bbox: { left: 10, bottom: 20, right: 30, top: 40 },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('syncs the fitted extent to redux right after a zoom-to-layer command, without needing a later pan', () => {
+    // Regression guard: view.fit() here fires the view's 'change' event
+    // synchronously, same as the viewCommand bbox-fit above - the map
+    // itself visibly zoomed to the layer either way (it reads the live OL
+    // view directly), but without an explicit sync here, redux (and so the
+    // permalink) kept advertising the view from before the zoom, since
+    // nothing else ever told it about this fit.
+    const dispatchMock = jest.fn();
+    mockUseAppDispatch.mockReturnValue(dispatchMock);
+    const fittedView = {
+      on: jest.fn(),
+      un: jest.fn(),
+      fit: jest.fn(),
+      calculateExtent: jest.fn(() => [10, 20, 30, 40]),
+      getProjection: jest.fn(() => ({ getCode: () => 'EPSG:3857' })),
+    };
+    mockMakeView.mockImplementation(
+      () => fittedView as unknown as ReturnType<typeof makeView>,
+    );
+    mockGetWMLayerById.mockReturnValue(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+    );
+    mockGetLayerExtentForProjection.mockReturnValue([1, 2, 3, 4]);
+
+    const { rerender } = render(
+      <ReduxMapViewComponent mapId={mapId} update={jest.fn()} />,
+    );
+    dispatchMock.mockClear();
+
+    act(() => {
+      mockState = {
+        ...mockState,
+        viewer: {
+          ...mockState.viewer,
+          maps: {
+            ...mockState.viewer.maps,
+            [mapId]: {
+              ...mockState.viewer.maps[mapId],
+              zoomToLayerCommand: { layerId: 'layer-1', requestId: 1 },
+            },
+          },
+        },
+      };
+      rerender(<ReduxMapViewComponent mapId={mapId} update={jest.fn()} />);
+    });
+
+    expect(fittedView.fit).toHaveBeenCalledWith([1, 2, 3, 4]);
+    expect(dispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          mapId,
+          view: {
+            srs: 'EPSG:3857',
+            bbox: { left: 10, bottom: 20, right: 30, top: 40 },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('does not dispatch a stale srs/bbox left over from the previous view after switching projections', () => {
+    jest.useFakeTimers();
+
+    const onMock = jest.fn<void, [string, () => void]>();
+    const makeFakeViewWithSrs = (srs: string, extent: number[]): unknown => ({
+      on: onMock,
+      un: jest.fn(),
+      calculateExtent: jest.fn(() => extent),
+      getProjection: jest.fn(() => ({ getCode: () => srs })),
+    });
+    const viewV1 = makeFakeViewWithSrs('EPSG:3857', [1, 2, 3, 4]);
+    const viewV2 = makeFakeViewWithSrs('EPSG:28992', [5, 6, 7, 8]);
+    mockMakeView
+      .mockImplementationOnce(() => viewV1 as ReturnType<typeof makeView>)
+      .mockImplementationOnce(() => viewV2 as ReturnType<typeof makeView>);
+    const dispatchMock = jest.fn();
+    mockUseAppDispatch.mockReturnValue(dispatchMock);
+
+    const { rerender } = render(
+      <ReduxMapViewComponent mapId={mapId} update={jest.fn()} />,
+    );
+
+    // Simulate the user having just panned/zoomed on the old view right
+    // before switching projections - this arms its 200ms debounce timer.
+    const v1ChangeCall = onMock.mock.calls.find(
+      ([event]) => event === 'change',
+    );
+    const v1ChangeHandler = v1ChangeCall?.[1];
+    act(() => {
+      v1ChangeHandler?.();
+    });
+
+    // Switching projections swaps in viewV2 - the old view's still-pending
+    // debounce from above must not survive this.
+    act(() => {
+      mockState = {
+        ...mockState,
+        viewer: {
+          ...mockState.viewer,
+          maps: {
+            ...mockState.viewer.maps,
+            [mapId]: {
+              ...mockState.viewer.maps[mapId],
+              viewCommand: {
+                srs: 'EPSG:28992',
+                bbox: { left: 0, bottom: 0, right: 1, top: 1 },
+                requestId: 1,
+              },
+            },
+          },
+        },
+      };
+      rerender(<ReduxMapViewComponent mapId={mapId} update={jest.fn()} />);
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+
+    expect(dispatchMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          view: expect.objectContaining({ srs: 'EPSG:3857' }),
+        }),
+      }),
+    );
+
+    jest.useRealTimers();
+  });
+
   it('does not re-fit when the component re-renders without a new viewCommand', () => {
     const { rerender } = render(
       <ReduxMapViewComponent mapId={mapId} update={jest.fn()} />,
@@ -207,6 +412,68 @@ describe('ReduxMapViewComponent', () => {
     });
 
     expect(mockSetViewFromExtent).not.toHaveBeenCalled();
+  });
+
+  it('draws enabled base layers below the data layers and enabled overlays above them', () => {
+    mockState.viewer.baseLayers = [
+      {
+        id: 'baselayer-worldmap',
+        name: 'WorldMap',
+        title: 'KNMI Basemap',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        layerType: 'baseLayer' as any,
+        enabled: true,
+      },
+      {
+        id: 'baselayer-arcgis-sat',
+        name: 'arcGisSat',
+        title: 'ESRI ArcGIS Satellite',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        layerType: 'baseLayer' as any,
+        enabled: false,
+      },
+      {
+        id: 'overlay-countryborders',
+        name: 'countryborders',
+        title: 'World country borders',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        layerType: 'overLayer' as any,
+        enabled: true,
+      },
+    ];
+    const dataLayer: AdagucLayer = {
+      id: 'layer-data',
+      name: 'Data layer',
+      serviceUrl: 'http://example.com/wms',
+      style: 'default',
+      dimensions: [],
+      enabled: true,
+      opacity: 1,
+    };
+    mockState.viewer.maps[mapId].layers = [dataLayer];
+
+    render(<ReduxMapViewComponent mapId={mapId} update={jest.fn()} />);
+
+    // Regression guard: webmap-react's OpenLayersLayer hardcodes
+    // `enabled: true` internally for any `type: 'twms'` base/overlay layer
+    // (every Baselayers-tab preset), silently ignoring whatever `enabled`
+    // is actually passed to it - so a disabled preset must not be rendered
+    // at all, rather than rendered and trusted to stay hidden.
+    const renderedIds = new Set(
+      mockOpenLayersLayerCalls.map((call) => call.id),
+    );
+    expect(renderedIds.has('baselayer-worldmap')).toBe(true);
+    expect(renderedIds.has('baselayer-arcgis-sat')).toBe(false);
+
+    const zIndexById = new Map(
+      mockOpenLayersLayerCalls.map((call) => [call.id, call.zIndex]),
+    );
+    expect(zIndexById.get('baselayer-worldmap')).toBeLessThan(
+      zIndexById.get('layer-data'),
+    );
+    expect(zIndexById.get('layer-data')).toBeLessThan(
+      zIndexById.get('overlay-countryborders'),
+    );
   });
 
   it('draws the layer at the top of the list above the ones below it', () => {

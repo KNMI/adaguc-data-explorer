@@ -11,6 +11,7 @@
 !.eslintrc
 !.npmignore
 !.prettierrc
+!jest.config.js
 !babel.config.js
 !postcss.config.js
 !tsconfig.json

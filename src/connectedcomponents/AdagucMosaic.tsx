@@ -14,7 +14,10 @@ export const AdagucMosaic = ({
     window.innerWidth || 0,
   );
 
-  const layerPanelWidth = 300;
+  // Wide enough that the footer icon row (now 8 icons, including the two
+  // move-up/move-down buttons) still leaves the opacity slider between
+  // them some real room, instead of squeezing it down to a sliver.
+  const layerPanelWidth = 380;
   const rightPanelWidth = 500;
 
   const leftPanelWidthPercentage = (layerPanelWidth / screenWidth) * 100;

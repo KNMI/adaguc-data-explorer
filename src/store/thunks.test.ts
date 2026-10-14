@@ -50,7 +50,9 @@ const runThunk = async <T>(
   return thunkAction(dispatch, getState, undefined);
 };
 
-const emptyState: ViewerState = { viewer: { services: {}, maps: {} } };
+const emptyState: ViewerState = {
+  viewer: { services: {}, maps: {}, baseLayers: [] },
+};
 
 describe('thunks.addLayer', () => {
   beforeEach(() => {

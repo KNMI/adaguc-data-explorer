@@ -1,9 +1,12 @@
 import * as React from 'react';
-import { AppBar, Box, IconButton, Toolbar } from '@mui/material';
+import { AppBar, Box, IconButton, Toolbar, Tooltip } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import CreateLinkIcon from '@mui/icons-material/Link';
+import PublicIcon from '@mui/icons-material/Public';
+import AdagucAboutDialog from './AdagucAboutDialog';
 import AdagucAddDataDialog from './AdagucAddDataDialog';
 import AdagucCreatePermalinkDialog from './AdagucCreatePermalinkDialog';
+import PredefinedAreasDialog from './PredefinedAreasDialog';
 import WMSServiceInput from './WMSServiceInput';
 
 const AdagucAppBar = (): React.ReactElement => {
@@ -11,6 +14,9 @@ const AdagucAppBar = (): React.ReactElement => {
     React.useState<boolean>(false);
   const [createLinkDialogOpen, setCreateLinkDialogOpen] =
     React.useState<boolean>(false);
+  const [predefinedAreasDialogOpen, setPredefinedAreasDialogOpen] =
+    React.useState<boolean>(false);
+  const [aboutDialogOpen, setAboutDialogOpen] = React.useState<boolean>(false);
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -22,6 +28,14 @@ const AdagucAppBar = (): React.ReactElement => {
         isDialogOpen={createLinkDialogOpen}
         onDialogOpen={setCreateLinkDialogOpen}
       />
+      <PredefinedAreasDialog
+        isDialogOpen={predefinedAreasDialogOpen}
+        onDialogOpen={setPredefinedAreasDialogOpen}
+      />
+      <AdagucAboutDialog
+        isDialogOpen={aboutDialogOpen}
+        onDialogOpen={setAboutDialogOpen}
+      />
       <AppBar position="static" elevation={0}>
         {/* Toolbar's default height comes from theme.mixins.toolbar, which
             sets its own minHeight at the "sm" breakpoint - a plain
@@ -31,9 +45,21 @@ const AdagucAppBar = (): React.ReactElement => {
             it). Repeating the override at "sm" too makes sure it wins at
             every size. */}
         <Toolbar sx={{ minHeight: { xs: '78px', sm: '78px' } }}>
+          <Tooltip title="Predefined areas">
+            <IconButton
+              size="large"
+              color="inherit"
+              aria-label="Predefined areas"
+              sx={{ mr: 1 }}
+              onClick={() => {
+                setPredefinedAreasDialogOpen(true);
+              }}
+            >
+              <PublicIcon sx={{ fontSize: 28 }} />
+            </IconButton>
+          </Tooltip>
           <IconButton
             size="large"
-            edge="start"
             color="inherit"
             aria-label="menu"
             sx={{ mr: 2 }}
@@ -41,7 +67,7 @@ const AdagucAppBar = (): React.ReactElement => {
               setAddDataDialogOpen(true);
             }}
           >
-            <MenuIcon />
+            <MenuIcon sx={{ fontSize: 28 }} />
           </IconButton>
           <WMSServiceInput
             sx={{
@@ -53,7 +79,6 @@ const AdagucAppBar = (): React.ReactElement => {
           />
           <IconButton
             size="large"
-            edge="start"
             color="inherit"
             aria-label="menu"
             sx={{ mr: 2 }}
@@ -61,8 +86,25 @@ const AdagucAppBar = (): React.ReactElement => {
               setCreateLinkDialogOpen(true);
             }}
           >
-            <CreateLinkIcon />
+            <CreateLinkIcon sx={{ fontSize: 28 }} />
           </IconButton>
+          <Tooltip title="About Adaguc Data Explorer (ADE)">
+            <IconButton
+              size="large"
+              color="inherit"
+              aria-label="About Adaguc Data Explorer"
+              onClick={() => {
+                setAboutDialogOpen(true);
+              }}
+            >
+              <Box
+                component="img"
+                src="./adaguc-globe.png"
+                alt="ADAGUC"
+                sx={{ width: 28, height: 28 }}
+              />
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
     </Box>

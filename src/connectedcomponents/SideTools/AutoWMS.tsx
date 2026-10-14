@@ -5,17 +5,34 @@ import {
   queryWMSServiceInfo,
 } from '@opengeoweb/webmap';
 import {
+  Box,
+  Chip,
   IconButton,
   LinearProgress,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
   Skeleton,
+  Stack,
   TextField,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import ArrowForwardSharp from '@mui/icons-material/ArrowForwardSharp';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import DatasetIcon from '@mui/icons-material/Dataset';
+import FolderIcon from '@mui/icons-material/Folder';
 import InfoIcon from '@mui/icons-material/Info';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { alpha } from '@mui/material/styles';
 import { CopyToClipBoard } from '../CopyToClipBoard';
 import AutoWMSLayerDetailsDialog from './AutoWMSLayerDetailsDialog';
 import { AdagucAutoWMSServiceCommand } from '../../store/types';
+import { makeGoodServiceLink } from '../../utils/makeGoodServiceLink';
+
+const PREVIEW_SIZE_PX = 140;
 
 const AUTOWMS_INPUT_DEBOUNCE_MS = 600;
 // Caps how many new preview images start loading per second, so opening a
@@ -39,13 +56,6 @@ interface AutoWMSProps {
 
 const isWMSService = (service: string): boolean => {
   return service?.toLocaleLowerCase().indexOf('service=wms') > 0 || false;
-};
-
-const makeGoodServiceLink = (service: string): string => {
-  if (service.indexOf('?') === -1) {
-    return `${service}?`;
-  }
-  return service;
 };
 
 const AutoWMS = ({
@@ -246,56 +256,140 @@ const AutoWMS = ({
 
   const autowmsExplorerList = currentLeaf.length === 0 &&
     layers?.length === 0 && (
-      <div>
-        {result?.result?.map((p, i) => {
-          return (
-            <div key={p.path + p.name}>
-              <div
-                className="autowms_app_fileitem"
-                onClick={() => {
-                  if (p.leaf !== true) {
-                    changeLeaf('');
-                    changePath(p.path);
-                  } else {
-                    setOGCWMSService(p.adaguc);
-                    changeLeaf(p.path);
-                  }
-                }}
-                onKeyDown={() => {}}
-                role="button"
-                tabIndex={i}
-              >
-                <span>{p.leaf ? '🗃' : '📁'}&nbsp;</span>
-                <span>{p.name}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <List dense disablePadding>
+        {result?.result?.length === 0 && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ px: 2, py: 1.5 }}
+          >
+            No items found.
+          </Typography>
+        )}
+        {result?.result?.map((p) => (
+          <ListItemButton
+            key={p.path + p.name}
+            onClick={() => {
+              if (p.leaf !== true) {
+                changeLeaf('');
+                changePath(p.path);
+              } else {
+                setOGCWMSService(p.adaguc);
+                changeLeaf(p.path);
+              }
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              {p.leaf ? (
+                <DatasetIcon fontSize="small" color="action" />
+              ) : (
+                <FolderIcon fontSize="small" color="action" />
+              )}
+            </ListItemIcon>
+            <ListItemText
+              primary={p.name}
+              primaryTypographyProps={{ variant: 'body2' }}
+            />
+          </ListItemButton>
+        ))}
+      </List>
     );
 
   const wmsLink = `${ogcWMSService}SERVICE=WMS&REQUEST=GetCapabilities`;
   const autowmsWMSServiceHeader = ogcWMSService?.length > 0 && (
-    <div className="autowms_app_serviceabstract">
-      Abstract: {wmsAbstract}
-      <hr />
-      WMS:
-      <CopyToClipBoard info="WMS Service link" text={wmsLink} />
-      <a target="_blank" rel="noreferrer" href={wmsLink}>
-        {wmsLink}
-      </a>
-    </div>
+    <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+      {wmsAbstract && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {wmsAbstract}
+        </Typography>
+      )}
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <Chip size="small" label="WMS" variant="outlined" />
+        <CopyToClipBoard info="WMS Service link" text={wmsLink} />
+        <Typography
+          component="a"
+          variant="body2"
+          href={wmsLink}
+          target="_blank"
+          rel="noreferrer"
+          sx={{ color: 'primary.main', wordBreak: 'break-all' }}
+        >
+          {wmsLink}
+        </Typography>
+      </Stack>
+    </Box>
   );
 
   const autowmsWMSService = layers?.length > 0 && (
-    <div>
+    <Stack spacing={1} sx={{ p: 1.5 }}>
       {layers.map((layer: LayerProps, i) => {
-        const wmsImage = `${ogcWMSService}&LAYERS=${layer.name}&WIDTH=400&HEIGHT=400&SERVICE=WMS&request=GETMAP&format=image/webp&CRS=EPSG:4326`;
+        const wmsImage = `${ogcWMSService}&LAYERS=${layer.name}&WIDTH=${
+          PREVIEW_SIZE_PX * 2
+        }&HEIGHT=${
+          PREVIEW_SIZE_PX * 2
+        }&SERVICE=WMS&request=GETMAP&format=image/webp&CRS=EPSG:4326`;
         return (
-          <div className="autowms_app_layeritem" key={wmsImage}>
-            <span className="autowms_app_layeritem_text">
-              {layer.title} - ({layer.name})
-            </span>
+          <Paper
+            key={wmsImage}
+            variant="outlined"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              p: 1,
+              borderRadius: 2,
+            }}
+          >
+            <Box
+              onClick={() => {
+                addLayer(ogcWMSService, layer.name);
+              }}
+              onKeyDown={() => {}}
+              role="button"
+              tabIndex={0}
+              aria-label={`Add ${layer.title} to the map`}
+              sx={{
+                flexShrink: 0,
+                width: PREVIEW_SIZE_PX,
+                height: PREVIEW_SIZE_PX,
+                borderRadius: 1.5,
+                overflow: 'hidden',
+                cursor: 'pointer',
+                bgcolor: 'background.default',
+              }}
+            >
+              {i < visiblePreviewCount ? (
+                <img
+                  src={wmsImage}
+                  alt={layer.title}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                <Skeleton
+                  variant="rectangular"
+                  width={PREVIEW_SIZE_PX}
+                  height={PREVIEW_SIZE_PX}
+                />
+              )}
+            </Box>
+            <Stack spacing={0.5} sx={{ minWidth: 0, flexGrow: 1 }}>
+              <Typography variant="subtitle2" noWrap>
+                {layer.title}
+              </Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                noWrap
+                sx={{ fontFamily: 'monospace' }}
+              >
+                {layer.name}
+              </Typography>
+            </Stack>
             <Tooltip title="Layer details">
               <IconButton
                 size="small"
@@ -307,37 +401,23 @@ const AutoWMS = ({
                 <InfoIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            <span
-              className="autowms_app_layeritem_image"
-              onClick={() => {
-                addLayer(ogcWMSService, layer.name);
-              }}
-              onKeyDown={() => {}}
-              role="button"
-              tabIndex={i + 1000}
-            >
-              {i < visiblePreviewCount ? (
-                <img src={wmsImage} alt={layer.title} />
-              ) : (
-                <Skeleton variant="rectangular" width={250} height={250} />
-              )}
-            </span>
-          </div>
+          </Paper>
         );
       })}
-    </div>
+    </Stack>
   );
 
   return (
     <div className="autowms_app_container">
-      <div className="autowms_app_currentpath">
-        <div className="autowms_app_request_container">
+      <Paper sx={{ m: 1, p: 1.5, borderRadius: 2 }}>
+        <Stack direction="row" spacing={1}>
           <TextField
-            style={{ width: 'inherit', background: 'white' }}
-            id="outlined-basic"
+            fullWidth
+            size="small"
             label="Add AutoWMS or WMS service"
             variant="outlined"
             value={autoWMSServiceInput}
+            sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
             onChange={(e) => {
               setAutoWMSServiceInput(e.target.value);
             }}
@@ -349,10 +429,7 @@ const AutoWMS = ({
           />
           <Tooltip title="Load (you can also reference this via the ?autowms=<url> querystring in the browser location bar">
             <IconButton
-              size="small"
-              edge="end"
-              color="inherit"
-              aria-label="menu"
+              aria-label="Load service"
               onClick={() => {
                 fetchNewAutoWMS();
               }}
@@ -360,56 +437,73 @@ const AutoWMS = ({
               <ArrowForwardSharp />
             </IconButton>
           </Tooltip>
-        </div>
-      </div>
-      <div className="autowms_app_currentpath">
-        Current path: {path}
-        {currentLeaf}
-      </div>
-      <span className="autowms_app_fileitem_header">
-        <span
-          className="autowms_app_fileitem_return"
-          onClick={() => {
-            if (isWMSService(autoWMSService)) {
-              refresh();
-              return;
-            }
-            setLayers([]);
-            setOGCWMSService('');
-            if (currentLeaf.length > 0) {
-              changeLeaf('');
-            } else {
-              const pathItems = path.split('/');
-              if (pathItems.length > 1) {
-                pathItems.pop();
-                changePath(pathItems.join('/'));
-              } else {
-                changePath('');
-              }
-            }
+        </Stack>
+      </Paper>
+      <Paper sx={{ mx: 1, mb: 1, borderRadius: 2, overflow: 'hidden' }}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{
+            px: 1.5,
+            py: 1,
+            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
           }}
-          onKeyDown={() => {}}
-          role="button"
-          tabIndex={0}
         >
-          📁&nbsp;<b>../ (⇧)</b>
-        </span>
-        <span
-          className="autowms_app_fileitem_refresh"
-          onClick={() => {
-            refresh();
-          }}
-          onKeyDown={() => {}}
-          role="button"
-          tabIndex={0}
-        >
-          ↻&nbsp;<b>Refresh</b>
-        </span>
-      </span>
-      {autowmsExplorerList}
-      {autowmsWMSServiceHeader}
-      {autowmsWMSService}
-      {isLoading && <LinearProgress />}
+          <Typography
+            variant="body2"
+            noWrap
+            sx={{ fontFamily: 'monospace', minWidth: 0 }}
+          >
+            Current path: {path}
+            {currentLeaf}
+          </Typography>
+          <Stack direction="row" spacing={0.5} flexShrink={0}>
+            <Tooltip title="Up one level">
+              <IconButton
+                size="small"
+                aria-label="Up one level"
+                onClick={() => {
+                  if (isWMSService(autoWMSService)) {
+                    refresh();
+                    return;
+                  }
+                  setLayers([]);
+                  setOGCWMSService('');
+                  if (currentLeaf.length > 0) {
+                    changeLeaf('');
+                  } else {
+                    const pathItems = path.split('/');
+                    if (pathItems.length > 1) {
+                      pathItems.pop();
+                      changePath(pathItems.join('/'));
+                    } else {
+                      changePath('');
+                    }
+                  }
+                }}
+              >
+                <ArrowUpwardIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Refresh">
+              <IconButton
+                size="small"
+                aria-label="Refresh"
+                onClick={() => {
+                  refresh();
+                }}
+              >
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Stack>
+        {autowmsExplorerList}
+        {autowmsWMSServiceHeader}
+        {autowmsWMSService}
+        {isLoading && <LinearProgress />}
+      </Paper>
       <AutoWMSLayerDetailsDialog
         serviceUrl={ogcWMSService}
         layer={detailsLayer}

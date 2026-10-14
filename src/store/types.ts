@@ -1,4 +1,4 @@
-import { Bbox, LayerProps } from '@opengeoweb/webmap';
+import { Bbox, LayerProps, LayerType } from '@opengeoweb/webmap';
 import { MapLocation } from '@opengeoweb/webmap-react';
 
 export interface AdagucLayerDimension {
@@ -50,6 +50,16 @@ export interface AdagucZoomToLayerCommand {
   requestId: number;
 }
 
+export interface AdagucHistogramBox {
+  bbox: Bbox;
+  srs: string;
+  // The box's own on-screen size as dragged, in device pixels - passed
+  // through as the GetHistoGram request's WIDTH/HEIGHT (sampling density),
+  // matching adaguc-viewer's legacy histogram tool rather than a fixed grid.
+  pixelWidth: number;
+  pixelHeight: number;
+}
+
 export interface AdagucMap {
   isAnimating: boolean;
   layers: AdagucLayer[];
@@ -58,10 +68,27 @@ export interface AdagucMap {
   zoomToLayerCommand?: AdagucZoomToLayerCommand;
   isGetFeatureInfoActive: boolean;
   mapPinLocation?: MapLocation;
+  isHistogramBoxSelectActive: boolean;
+  histogramBox?: AdagucHistogramBox;
 }
 export interface AdagucAutoWMSServiceCommand {
   service: string;
   requestId: number;
+}
+
+// A predefined entry in the Baselayers tab (see BaseLayersPanel) - ported
+// from adaguc-viewer's own baseLayerConfiguration list of selectable base
+// maps/overlays. Unlike AdagucLayer, these aren't added/removed by the
+// user - the list itself is fixed, only `enabled` is ever toggled.
+export interface AdagucBaseLayer {
+  id: string;
+  name: string;
+  title: string;
+  layerType: LayerType.baseLayer | LayerType.overLayer;
+  enabled: boolean;
+  type?: string;
+  format?: string;
+  service?: string;
 }
 
 export interface AdagucMapsState {
@@ -73,6 +100,9 @@ export interface AdagucMapsState {
   // a plain OGC WMS GetCapabilities url, so it opens there instead of being
   // added as a map layer.
   autoWMSServiceCommand?: AdagucAutoWMSServiceCommand;
+  // Also not tied to a specific map, for the same reason as above - this
+  // app only ever has the one map.
+  baseLayers: AdagucBaseLayer[];
 }
 
 export interface ViewerState {

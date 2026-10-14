@@ -2,7 +2,8 @@
 import * as React from 'react';
 import { View } from 'ol';
 import { debounce } from 'lodash';
-import { getWMLayerById } from '@opengeoweb/webmap';
+import { Tooltip } from '@mui/material';
+import { LayerType, getWMLayerById } from '@opengeoweb/webmap';
 import {
   OpenLayersMapView,
   OpenLayersLayer,
@@ -14,11 +15,16 @@ import {
 } from '@opengeoweb/webmap-react';
 import { actions, useAppDispatch, useAppSelector } from '../store/store';
 import { selectors } from '../store/selectors';
-import { AdagucLayer, AdagucMapView, ViewerState } from '../store/types';
-import { baseLayerWorldMap, overlayLayer } from '../utils/layerDefinitions';
+import {
+  AdagucBaseLayer,
+  AdagucLayer,
+  AdagucMapView,
+  ViewerState,
+} from '../store/types';
 import { ReduxMapLayer } from './ReduxMapLayer';
 import { AnimationClock, AnimationTick } from './AnimationClock';
 import { ErrorBoundary } from '../components/ErrorBoundary/ErrorBoundary';
+import OpenLayersHistogramBoxSelect from './OpenLayersHistogramBoxSelect';
 
 export interface ReduxMapViewComponentProps {
   mapId: string;
@@ -26,10 +32,51 @@ export interface ReduxMapViewComponentProps {
 }
 
 // The layer list shows the topmost-drawn layer first, so it needs the
-// highest zIndex. Starting data layers above the base layer (zIndex 0) and
-// safely below the overlay (zIndex 10000, see layerDefinitions.ts) leaves
-// room for any reasonable number of layers in between.
+// highest zIndex. Base layers get a large negative range (so any number of
+// Baselayers-tab presets - see baseLayerPresets.ts - always stay below 0),
+// data layers start at 1, and overlays get a large positive range, safely
+// above however many data layers there are.
+const BASE_LAYER_BASE_ZINDEX = -1000;
 const DATA_LAYER_BASE_ZINDEX = 1;
+const OVERLAY_BASE_ZINDEX = 10000;
+
+// A plain DOM child here renders on top of the map canvas (the same way
+// OpenLayersMapView's own MapMousePosition overlay does) - bottom-right is
+// free of any other overlay (MapMousePosition sits bottom-left), so the
+// watermark can't end up covering/covered by it.
+const Watermark = (): React.ReactElement => (
+  <div
+    style={{
+      position: 'absolute',
+      right: 8,
+      bottom: 8,
+      zIndex: 10,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      padding: '2px 8px',
+      borderRadius: 4,
+      background: 'rgba(255, 255, 255, 0.65)',
+      color: 'rgba(0, 0, 0, 0.6)',
+      fontSize: 11,
+      lineHeight: 1.4,
+      pointerEvents: 'none',
+      userSelect: 'none',
+    }}
+  >
+    <Tooltip title="Adaguc Data Explorer (ADE)">
+      <img
+        src="./adaguc-globe.png"
+        alt=""
+        // The watermark itself ignores pointer events so it never blocks
+        // clicking/panning the map underneath - re-enable them on just the
+        // icon so hovering it can still show this tooltip.
+        style={{ width: 14, height: 14, pointerEvents: 'auto' }}
+      />
+    </Tooltip>
+    KNMI Adaguc Data Explorer
+  </div>
+);
 
 export const ReduxMapViewComponent = ({
   mapId,
@@ -38,6 +85,9 @@ export const ReduxMapViewComponent = ({
   const dispatch = useAppDispatch();
   const mapLayers = useAppSelector((state: ViewerState): AdagucLayer[] =>
     selectors.getMapLayers(state, mapId),
+  );
+  const baseLayers = useAppSelector(
+    (state: ViewerState): AdagucBaseLayer[] => state?.viewer?.baseLayers,
   );
   const mapView = useAppSelector(
     (state: ViewerState): AdagucMapView => state?.viewer?.maps[mapId]?.view,
@@ -58,6 +108,10 @@ export const ReduxMapViewComponent = ({
   const mapPinLocation = useAppSelector(
     (state: ViewerState): MapLocation =>
       state?.viewer?.maps[mapId]?.mapPinLocation,
+  );
+  const isHistogramBoxSelectActive = useAppSelector(
+    (state: ViewerState): boolean =>
+      state?.viewer?.maps[mapId]?.isHistogramBoxSelectActive,
   );
 
   // Each animated layer used to run its own independent useAnimationForLayer
@@ -88,6 +142,35 @@ export const ReduxMapViewComponent = ({
   const lastAppliedZoomCommandId = React.useRef<number>(0);
   const pendingFitBbox = React.useRef<AdagucMapView['bbox'] | null>(null);
 
+  // Reads the view directly (rather than waiting for its 'change' event)
+  // so a fit triggered here is reflected in redux - and so the permalink -
+  // immediately, instead of only if something later happens to also pan or
+  // zoom the map (see callers below for why 'change' alone isn't enough).
+  const syncViewToRedux = React.useCallback(
+    (viewToSync: View): void => {
+      try {
+        const extent = viewToSync.calculateExtent();
+        dispatch(
+          actions.updateMapView({
+            mapId,
+            view: {
+              srs: viewToSync.getProjection().getCode(),
+              bbox: {
+                left: extent[0],
+                bottom: extent[1],
+                right: extent[2],
+                top: extent[3],
+              },
+            },
+          }),
+        );
+      } catch {
+        // View size is not known yet, nothing to sync.
+      }
+    },
+    [mapId, dispatch],
+  );
+
   React.useEffect(() => {
     if (
       !viewCommand ||
@@ -112,7 +195,16 @@ export const ReduxMapViewComponent = ({
     }
     setViewFromExtent(view, pendingFitBbox.current);
     pendingFitBbox.current = null;
-  }, [view]);
+    // Fitting above can itself fire the view's 'change' event before the
+    // listener effect further below (declared after this one, so it
+    // subscribes later in this same commit) has attached to this new
+    // view - that fires are missed, and without a later pan/zoom nothing
+    // else would tell redux (and so the permalink) that the projection
+    // actually changed, even though the map itself already shows it
+    // correctly (it reads the live OL view directly, not redux). Sync it
+    // here explicitly instead of only ever relying on a future 'change'.
+    syncViewToRedux(view);
+  }, [view, syncViewToRedux]);
 
   React.useEffect(() => {
     if (
@@ -127,37 +219,31 @@ export const ReduxMapViewComponent = ({
       wmLayer &&
       getLayerExtentForProjection(wmLayer, view.getProjection().getCode());
     if (extent) {
+      // view.fit() fires 'change' synchronously - same race as the
+      // pendingFitBbox effect above, so this needs the same explicit sync
+      // rather than relying on the debounced listener further below:
+      // without it, the map visibly zooms to the layer but redux (and so
+      // the permalink) keeps advertising the view from before the zoom.
       view.fit(extent);
+      syncViewToRedux(view);
     }
-  }, [zoomToLayerCommand, view]);
+  }, [zoomToLayerCommand, view, syncViewToRedux]);
 
   React.useEffect(() => {
-    const onViewChange = debounce(() => {
-      try {
-        const extent = view.calculateExtent();
-        dispatch(
-          actions.updateMapView({
-            mapId,
-            view: {
-              srs: view.getProjection().getCode(),
-              bbox: {
-                left: extent[0],
-                bottom: extent[1],
-                right: extent[2],
-                top: extent[3],
-              },
-            },
-          }),
-        );
-      } catch {
-        // View size is not known yet, nothing to sync.
-      }
-    }, 200);
+    const onViewChange = debounce(() => syncViewToRedux(view), 200);
     view.on('change', onViewChange);
     return () => {
       view.un('change', onViewChange);
+      // A 'change' event just before this view gets swapped out (e.g. for
+      // a projection switch) can already have armed the 200ms debounce
+      // timer - un() only stops future events, it doesn't cancel that
+      // still-pending timer. Left uncancelled, it fires anyway, reading
+      // this (by then detached) view's srs/bbox and dispatching it over
+      // the newly-set projection, so the permalink doesn't always end up
+      // advertising the projection the user actually switched to.
+      onViewChange.cancel();
     };
-  }, [view, mapId, dispatch]);
+  }, [view, syncViewToRedux]);
 
   return (
     <OpenLayersMapView view={view} mapId={mapId}>
@@ -168,7 +254,23 @@ export const ReduxMapViewComponent = ({
           onTick={setAnimationTick}
         />
       )}
-      <OpenLayersLayer {...baseLayerWorldMap} />
+      {baseLayers
+        // Only mounting enabled entries, rather than passing `enabled`
+        // through and trusting it to toggle visibility: webmap-react's
+        // OpenLayersLayer hardcodes `enabled: true` for any `type: 'twms'`
+        // base/overlay layer internally (see its XYZLayer branch), so that
+        // prop is silently ignored for every preset in baseLayerPresets.ts -
+        // not rendering a disabled one at all is what actually hides it.
+        .filter(
+          (layer) => layer.layerType === LayerType.baseLayer && layer.enabled,
+        )
+        .map((layer, index) => (
+          <OpenLayersLayer
+            key={layer.id}
+            {...layer}
+            zIndex={BASE_LAYER_BASE_ZINDEX + index}
+          />
+        ))}
       {mapLayers.map((layer, index) => {
         return (
           <ErrorBoundary
@@ -215,7 +317,17 @@ export const ReduxMapViewComponent = ({
           </ErrorBoundary>
         );
       })}
-      <OpenLayersLayer {...overlayLayer} />
+      {baseLayers
+        .filter(
+          (layer) => layer.layerType === LayerType.overLayer && layer.enabled,
+        )
+        .map((layer, index) => (
+          <OpenLayersLayer
+            key={layer.id}
+            {...layer}
+            zIndex={OVERLAY_BASE_ZINDEX + index}
+          />
+        ))}
       <OpenLayersGetFeatureInfo
         displayMapPin={isGetFeatureInfoActive}
         mapPinLocation={mapPinLocation}
@@ -225,6 +337,23 @@ export const ReduxMapViewComponent = ({
           }
         }}
       />
+      <OpenLayersHistogramBoxSelect
+        active={isHistogramBoxSelectActive}
+        onBoxSelected={(bbox, srs, pixelSize) => {
+          dispatch(
+            actions.setHistogramBox({
+              mapId,
+              box: {
+                bbox,
+                srs,
+                pixelWidth: pixelSize.width,
+                pixelHeight: pixelSize.height,
+              },
+            }),
+          );
+        }}
+      />
+      <Watermark />
     </OpenLayersMapView>
   );
 };

@@ -3,6 +3,7 @@ import { handleWindowLocationQueryString } from './handleWindowLocationQueryStri
 
 jest.mock('@opengeoweb/webmap', () => ({
   getWMLayerById: jest.fn(),
+  LayerType: { baseLayer: 'baseLayer', overLayer: 'overLayer' },
 }));
 
 const mapId = 'map1';

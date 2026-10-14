@@ -1,3 +1,4 @@
+import { produce } from 'immer';
 import { reducers } from './reducers';
 import { AdagucMapsState } from './types';
 
@@ -10,11 +11,13 @@ describe('reducers.setGetFeatureInfoActive', () => {
 
   const buildState = (): AdagucMapsState => ({
     services: {},
+    baseLayers: [],
     maps: {
       [mapId]: {
         layers: [],
         isAnimating: false,
         isGetFeatureInfoActive: true,
+        isHistogramBoxSelectActive: false,
         mapPinLocation: { lat: 1, lon: 2 },
         view: {
           srs: 'EPSG:3857',
@@ -40,7 +43,7 @@ describe('reducers.setGetFeatureInfoActive', () => {
   });
 
   it('does nothing when the map is not registered', () => {
-    const state: AdagucMapsState = { services: {}, maps: {} };
+    const state: AdagucMapsState = { services: {}, maps: {}, baseLayers: [] };
 
     expect(() =>
       reducers.setGetFeatureInfoActive(state, {
@@ -51,11 +54,136 @@ describe('reducers.setGetFeatureInfoActive', () => {
   });
 });
 
+describe('reducers.setHistogramBoxSelectActive / setHistogramBox', () => {
+  const mapId = 'map1';
+
+  const buildState = (): AdagucMapsState => ({
+    services: {},
+    baseLayers: [],
+    maps: {
+      [mapId]: {
+        layers: [],
+        isAnimating: false,
+        isGetFeatureInfoActive: false,
+        isHistogramBoxSelectActive: false,
+        view: {
+          srs: 'EPSG:3857',
+          bbox: { left: -1, bottom: -1, right: 1, top: 1 },
+        },
+      },
+    },
+  });
+
+  it('toggles isHistogramBoxSelectActive', () => {
+    const state = buildState();
+
+    reducers.setHistogramBoxSelectActive(state, {
+      payload: { mapId, active: true },
+    });
+
+    expect(state.maps[mapId].isHistogramBoxSelectActive).toBe(true);
+  });
+
+  it('stores the drawn box', () => {
+    const state = buildState();
+    const box = {
+      bbox: { left: -600000, bottom: 2100000, right: 7600000, top: 8700000 },
+      srs: 'EPSG:3857',
+      pixelWidth: 190,
+      pixelHeight: 959,
+    };
+
+    reducers.setHistogramBox(state, { payload: { mapId, box } });
+
+    expect(state.maps[mapId].histogramBox).toEqual(box);
+  });
+
+  it('does nothing when the map is not registered', () => {
+    const state: AdagucMapsState = { services: {}, maps: {}, baseLayers: [] };
+
+    expect(() => {
+      reducers.setHistogramBoxSelectActive(state, {
+        payload: { mapId: 'missing', active: true },
+      });
+      reducers.setHistogramBox(state, {
+        payload: {
+          mapId: 'missing',
+          box: {
+            bbox: { left: 0, bottom: 0, right: 1, top: 1 },
+            srs: 'EPSG:3857',
+            pixelWidth: 256,
+            pixelHeight: 256,
+          },
+        },
+      });
+    }).not.toThrow();
+    expect(state.maps).toEqual({});
+  });
+});
+
+describe('reducers.setBaseLayerEnabled', () => {
+  const buildState = (): AdagucMapsState => ({
+    services: {},
+    maps: {},
+    baseLayers: [
+      {
+        id: 'baselayer-worldmap',
+        name: 'WorldMap',
+        title: 'KNMI Basemap',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        layerType: 'baseLayer' as any,
+        enabled: true,
+      },
+      {
+        id: 'overlay-countryborders',
+        name: 'countryborders',
+        title: 'World country borders',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        layerType: 'overLayer' as any,
+        enabled: false,
+      },
+    ],
+  });
+
+  it('toggles only the matching base layer by id', () => {
+    const state = buildState();
+
+    reducers.setBaseLayerEnabled(state, {
+      payload: { id: 'overlay-countryborders', enabled: true },
+    });
+
+    expect(state.baseLayers[0].enabled).toBe(true);
+    expect(state.baseLayers[1].enabled).toBe(true);
+
+    reducers.setBaseLayerEnabled(state, {
+      payload: { id: 'baselayer-worldmap', enabled: false },
+    });
+
+    expect(state.baseLayers[0].enabled).toBe(false);
+    expect(state.baseLayers[1].enabled).toBe(true);
+  });
+
+  it('does nothing when no base layer matches the given id', () => {
+    const state = buildState();
+
+    expect(() =>
+      reducers.setBaseLayerEnabled(state, {
+        payload: { id: 'missing', enabled: true },
+      }),
+    ).not.toThrow();
+    expect(state.baseLayers.map((l) => l.enabled)).toEqual([true, false]);
+  });
+});
+
 describe('reducers.fullFillAddLayer', () => {
   const mapId = 'map1';
   const serviceUrl = 'http://localhost:8080/adagucserver?dataset=test&';
 
-  const buildState = (): AdagucMapsState => ({ services: {}, maps: {} });
+  const buildState = (): AdagucMapsState => ({
+    services: {},
+    maps: {},
+    baseLayers: [],
+  });
 
   it('adds the layer even when the service lists no layers at all', () => {
     // Regression guard: some services (e.g. the ADAGUC wikgeneric test
@@ -122,6 +250,47 @@ describe('reducers.fullFillAddLayer', () => {
 
     expect(state.maps[mapId].layers[0].style).toBe('pressure_default');
   });
+
+  it('does not crash on a second dispatch for the same service, when run through Immer like the real store does', () => {
+    // Regression guard: this reducer used to look up the service's layers
+    // via the memoized selectors.getAvailableLayers, fed the raw Immer
+    // draft state directly. Reselect's cache then held a reference into
+    // that draft; once this reducer's own produce() call finished, Immer
+    // revoked the draft's proxy, and the *next* dispatch crashed trying
+    // to compare its new args against that now-revoked reference
+    // ("Cannot perform 'IsArray' on a proxy that has been revoked").
+    // Calling the reducer directly on a plain object (as every other test
+    // in this file does) never exercises this - only a real producer
+    // (createSlice wraps every reducer in one) creates the Proxy that can
+    // later be revoked, hence the real immer produce() calls below.
+    const state = buildState();
+    state.services['service-1'] = {
+      id: 'service-1',
+      serviceUrl,
+      layers: [{ name: 'air_pressure_msl', styles: [] }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const payload = (id: string) => ({
+      mapId,
+      name: 'air_pressure_msl',
+      serviceUrl,
+      id,
+      dimensions: [],
+      enabled: true,
+      opacity: 1,
+    });
+
+    const afterFirst = produce(state, (draft) => {
+      reducers.fullFillAddLayer(draft, { payload: payload('layer-1') });
+    });
+
+    expect(() => {
+      produce(afterFirst, (draft) => {
+        reducers.fullFillAddLayer(draft, { payload: payload('layer-2') });
+      });
+    }).not.toThrow();
+  });
 });
 
 describe('reducers.syncAnimatedLayerDimension', () => {
@@ -129,10 +298,12 @@ describe('reducers.syncAnimatedLayerDimension', () => {
 
   const buildState = (): AdagucMapsState => ({
     services: {},
+    baseLayers: [],
     maps: {
       [mapId]: {
         isAnimating: true,
         isGetFeatureInfoActive: false,
+        isHistogramBoxSelectActive: false,
         layers: [
           {
             id: 'layer-1',

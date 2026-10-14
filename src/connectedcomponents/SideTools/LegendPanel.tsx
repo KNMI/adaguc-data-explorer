@@ -22,8 +22,40 @@ const LegendPanel = ({ mapId }: LegendPanelProps): React.ReactElement => {
   );
 
   const [refreshToken, setRefreshToken] = React.useState(0);
+  const [, forceLegendSync] = React.useReducer((count: number) => count + 1, 0);
 
   const enabledLayers = layers.filter((layer) => layer.enabled);
+
+  // wmLayer.legendGraphic (read below via getLegendGraphicURLForLayer) is
+  // only updated by a *different* component's effect - the map layer that
+  // applies the selected style to OpenLayers. Without this, a style change
+  // can commit on the same render pass as this panel reading the still-old
+  // legendGraphic, with nothing left to trigger a re-render afterwards -
+  // so the legend can get stuck on the previous style. Resolve and apply
+  // the style to the WMLayer here too (mirroring the same fallback rule
+  // webmap-react's own layer effect uses), then force one more render so
+  // the legend url always reflects the layer's current Redux style.
+  const styleSyncKey = enabledLayers
+    .map((layer) => `${layer.id}:${layer.style ?? ''}`)
+    .join('|');
+  React.useEffect(() => {
+    enabledLayers.forEach((layer) => {
+      const wmLayer = getWMLayerById(layer.id);
+      if (!wmLayer) {
+        return;
+      }
+      const styles = wmLayer.getStyles();
+      const validStyleName =
+        layer.style &&
+        layer.style !== 'default' &&
+        styles.some((style) => style.name === layer.style)
+          ? layer.style
+          : '';
+      wmLayer.setStyle(validStyleName);
+    });
+    forceLegendSync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styleSyncKey]);
 
   const handleRefresh = (): void => {
     legendImageStore.clear();

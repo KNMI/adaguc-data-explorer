@@ -1,13 +1,13 @@
-import { getWMLayerById } from '@opengeoweb/webmap';
+import { Style, getWMLayerById } from '@opengeoweb/webmap';
 import { MapLocation } from '@opengeoweb/webmap-react';
 import {
+  AdagucHistogramBox,
   AdagucLayer,
   AdagucMapsState,
   AdagucService,
   AdagucMapView,
 } from './types';
 import { AddLayerInterfaceFulFilled } from './thunks';
-import { selectors } from './selectors';
 
 let viewCommandRequestCounter = 0;
 
@@ -55,6 +55,22 @@ const getServiceByServiceUrl = (
   return service;
 };
 
+// Mirrors selectors.getStyleListForLayer, but as a plain (unmemoized)
+// lookup - reducers run inside an Immer produce() call, and feeding that
+// draft state into a memoized reselect selector leaves its cache holding a
+// reference to this draft; once produce() finishes, Immer revokes the
+// draft's proxy, and the next call to the selector crashes trying to
+// compare against that now-revoked reference ("Cannot perform 'IsArray'
+// on a proxy that has been revoked").
+const getStyleListForReduxLayer = (
+  draftState: AdagucMapsState,
+  draftLayer: AdagucLayer,
+): Style[] => {
+  const service = getServiceByServiceUrl(draftState, draftLayer.serviceUrl);
+  const serviceLayer = service?.layers.find((l) => l.name === draftLayer.name);
+  return serviceLayer?.styles ?? [];
+};
+
 // eslint-disable-next-line import/prefer-default-export
 export const reducers = {
   registerMap: (
@@ -67,6 +83,7 @@ export const reducers = {
         layers: [],
         isAnimating: false,
         isGetFeatureInfoActive: false,
+        isHistogramBoxSelectActive: false,
         view: {
           srs: 'EPSG:3857',
           bbox: {
@@ -164,6 +181,41 @@ export const reducers = {
     draftState.maps[mapId].mapPinLocation = location;
     return draftState;
   },
+  setHistogramBoxSelectActive: (
+    draftState: AdagucMapsState,
+    action: { payload: { mapId: string; active: boolean } },
+  ): AdagucMapsState => {
+    const { mapId, active } = action.payload;
+    if (!draftState.maps[mapId]) {
+      return draftState;
+    }
+    draftState.maps[mapId].isHistogramBoxSelectActive = active;
+    return draftState;
+  },
+  setHistogramBox: (
+    draftState: AdagucMapsState,
+    action: {
+      payload: { mapId: string; box: AdagucHistogramBox | undefined };
+    },
+  ): AdagucMapsState => {
+    const { mapId, box } = action.payload;
+    if (!draftState.maps[mapId]) {
+      return draftState;
+    }
+    draftState.maps[mapId].histogramBox = box;
+    return draftState;
+  },
+  setBaseLayerEnabled: (
+    draftState: AdagucMapsState,
+    action: { payload: { id: string; enabled: boolean } },
+  ): AdagucMapsState => {
+    const { id, enabled } = action.payload;
+    const baseLayer = draftState.baseLayers.find((l) => l.id === id);
+    if (baseLayer) {
+      baseLayer.enabled = enabled;
+    }
+    return draftState;
+  },
   setLayerOrderByIds: (
     draftState: AdagucMapsState,
     action: { payload: { mapId: string; layerListIds: string[] } },
@@ -220,10 +272,7 @@ export const reducers = {
   ): AdagucMapsState => {
     const { mapId, layerIndex, styleName } = action.payload;
     const draftLayer = getReduxLayer(draftState, mapId, layerIndex);
-    const styleList = selectors.getStyleListForLayer(
-      { viewer: draftState },
-      draftLayer,
-    );
+    const styleList = getStyleListForReduxLayer(draftState, draftLayer);
     const exists = styleList.find((style) => style.name === styleName);
     const newStyleName = styleList.length > 0 ? styleList[0].name : 'default';
     draftLayer.style = exists ? styleName : newStyleName;
@@ -359,10 +408,8 @@ export const reducers = {
       opacity,
       hasError,
     } = action.payload;
-    const layers = selectors.getAvailableLayers(
-      { viewer: draftState },
-      serviceUrl,
-    );
+    const service = getServiceByServiceUrl(draftState, serviceUrl);
+    const layers = service ? service.layers : [];
     const layer = layers.find((layeri) => layeri.name === name);
     // Add the layer even when it isn't (yet) in the available-layers list:
     // some services don't enumerate their layers via GetCapabilities even

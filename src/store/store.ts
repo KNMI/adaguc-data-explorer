@@ -13,10 +13,12 @@ import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import { AdagucMapsState, ViewerState } from './types';
 import { addLayer, fetchWMSService } from './thunks';
 import { reducers } from './reducers';
+import { DEFAULT_BASE_LAYERS } from '../utils/baseLayerPresets';
 
 const initialState: AdagucMapsState = {
   maps: {},
   services: {},
+  baseLayers: DEFAULT_BASE_LAYERS,
 };
 
 /*

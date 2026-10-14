@@ -2,10 +2,12 @@ import React from 'react';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { queryWMSLayers, getWMLayerById } from '@opengeoweb/webmap';
 import ProjectionSelector from './ProjectionSelector';
 import AdagucNCDumpPanel from './AdagucNCDumpPanel';
 import WMSColorRangeSelector from './WMSColorRangeSelector';
+import WCSPanelDialog from './WCSPanelDialog';
 import { CopyToClipBoard } from '../CopyToClipBoard';
 
 export interface LayerDetailsComponentProps {
@@ -45,6 +47,7 @@ const LayerDetailsComponent = ({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [layerIdState, setLayerId] = React.useState(layerId);
   const [value, setValue] = React.useState(0);
+  const [isWCSPanelOpen, setIsWCSPanelOpen] = React.useState(false);
 
   // For testing purposes
   // React.useEffect(() => {
@@ -96,7 +99,15 @@ const LayerDetailsComponent = ({
         flexDirection: 'column',
       }}
     >
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        sx={{
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
         <Tabs
           value={value}
           onChange={handleChange}
@@ -107,7 +118,23 @@ const LayerDetailsComponent = ({
           <Tab label="Adaguc NCDump" />
           <Tab label="WMS Color range" />
         </Tabs>
+        <Button
+          size="small"
+          onClick={() => {
+            setIsWCSPanelOpen(true);
+          }}
+        >
+          WCS
+        </Button>
       </Box>
+      <WCSPanelDialog
+        mapId={mapId}
+        wmLayer={wmLayer}
+        isOpen={isWCSPanelOpen}
+        onClose={() => {
+          setIsWCSPanelOpen(false);
+        }}
+      />
       <Box sx={{ height: '100%' }}>
         <CustomTabPanel value={value} index={0}>
           <ProjectionSelector mapId={mapId} wmLayer={wmLayer} />

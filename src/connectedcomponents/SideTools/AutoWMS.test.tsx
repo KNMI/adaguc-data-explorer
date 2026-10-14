@@ -128,10 +128,7 @@ describe('AutoWMS', () => {
     const input = screen.getByLabelText('Add AutoWMS or WMS service');
     fireEvent.change(input, { target: { value: AUTOWMS_URL } });
 
-    // The Load button shares its (unhelpful) accessible name with other
-    // icon buttons app-wide, but AutoWMS is rendered in isolation here so
-    // it is the only "menu" labelled button in the tree.
-    const loadButton = screen.getByRole('button', { name: 'menu' });
+    const loadButton = screen.getByRole('button', { name: 'Load service' });
     fireEvent.click(loadButton);
 
     expect(mockFetch).toHaveBeenCalledWith(
@@ -179,7 +176,7 @@ describe('AutoWMS', () => {
 
     const input = screen.getByLabelText('Add AutoWMS or WMS service');
     fireEvent.change(input, { target: { value: WMS_URL } });
-    fireEvent.click(screen.getByRole('button', { name: 'menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
 
     await waitFor(() => {
       expect(mockQueryWMSLayers).toHaveBeenCalledWith(
@@ -216,7 +213,7 @@ describe('AutoWMS', () => {
 
     const input = screen.getByLabelText('Add AutoWMS or WMS service');
     fireEvent.change(input, { target: { value: WMS_URL } });
-    fireEvent.click(screen.getByRole('button', { name: 'menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
 
     expect(await screen.findByText(/Layer One/)).toBeInTheDocument();
     expect(
@@ -258,7 +255,7 @@ describe('AutoWMS', () => {
 
     const input = screen.getByLabelText('Add AutoWMS or WMS service');
     fireEvent.change(input, { target: { value: WMS_URL } });
-    fireEvent.click(screen.getByRole('button', { name: 'menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
 
     await waitFor(() => {
       expect(mockQueryWMSLayers).toHaveBeenCalled();
@@ -302,7 +299,7 @@ describe('AutoWMS', () => {
 
     const input = screen.getByLabelText('Add AutoWMS or WMS service');
     fireEvent.change(input, { target: { value: AUTOWMS_URL } });
-    fireEvent.click(screen.getByRole('button', { name: 'menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
 
     expect(await screen.findByText('SubFolder')).toBeInTheDocument();
 

@@ -1,9 +1,19 @@
 import * as React from 'react';
-import { Style, generateLayerId } from '@opengeoweb/webmap';
+import { Style, generateLayerId, getWMLayerById } from '@opengeoweb/webmap';
+import { clearImageCacheForAllMaps } from '@opengeoweb/webmap-react';
 import { actions, useAppDispatch, useAppSelector } from '../store/store';
 import { selectors } from '../store/selectors';
+import { thunks } from '../store/thunks';
 import { AdagucLayer, ViewerState } from '../store/types';
 import { LayerComponent } from '../components/LayerComponent/LayerComponent';
+
+// webmap-react assigns the live OL source onto the WMLayer instance at
+// `olSource` (for its own internal "metronome" use), but that isn't part
+// of WMLayer's public TS type - this is just enough of a shape to call
+// its (standard OL ImageSource) `refresh` method.
+interface WMLayerWithOlSource {
+  olSource?: { refresh?: () => void };
+}
 
 export interface ReduxLayerComponentProps {
   mapId: string;
@@ -59,6 +69,25 @@ export const ReduxLayerComponent = ({
   const layer = useAppSelector((state: ViewerState): AdagucLayer =>
     selectors.getMapLayerById(state, mapId, layerId),
   );
+
+  const layerIds = useAppSelector((state: ViewerState): string[] =>
+    selectors.getMapLayerIds(state, mapId),
+  );
+
+  // Swaps this layer with the one currently at targetIndex, reusing the
+  // same setLayerOrderByIds action the drag-and-drop list (SortableLayerList)
+  // already uses, so both ways of reordering stay in sync.
+  const moveLayer = (targetIndex: number): void => {
+    if (targetIndex < 0 || targetIndex >= layerIds.length) {
+      return;
+    }
+    const newOrder = [...layerIds];
+    [newOrder[layerIndex], newOrder[targetIndex]] = [
+      newOrder[targetIndex],
+      newOrder[layerIndex],
+    ];
+    dispatch(actions.setLayerOrderByIds({ mapId, layerListIds: newOrder }));
+  };
 
   const styleList = useAppSelector((state: ViewerState): Style[] =>
     selectors.getStyleListForLayer(state, layer),
@@ -132,6 +161,38 @@ export const ReduxLayerComponent = ({
       }),
     );
   };
+
+  // Forces a fresh GetCapabilities fetch for this layer, bypassing the
+  // cache both the live WMLayer (dimensions, styles, getmapURL) and the
+  // redux-tracked service (the layer/style pickers' own lists) would
+  // otherwise keep reusing.
+  const refreshLayerCapabilities = async (): Promise<void> => {
+    const wmLayer = getWMLayerById(layerId);
+    if (wmLayer) {
+      try {
+        await wmLayer.parseLayer(true);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn(e);
+      }
+      // Re-parsing only refreshes the layer's capabilities - the actual
+      // map imagery is cached completely separately, in webmap-react's
+      // shared image store, so without also clearing that (and nudging
+      // this layer's own OL source) the map would keep showing the same
+      // images even though a refresh was just requested.
+      clearImageCacheForAllMaps();
+      (wmLayer as unknown as WMLayerWithOlSource).olSource?.refresh?.();
+    }
+    if (layer?.serviceUrl) {
+      await dispatch(thunks.fetchWMSService(layer.serviceUrl))
+        .unwrap()
+        .catch((e) => {
+          // eslint-disable-next-line no-console
+          console.warn(e);
+        });
+    }
+  };
+
   return (
     <LayerComponent
       layer={layer}
@@ -181,6 +242,15 @@ export const ReduxLayerComponent = ({
       zoomToLayer={() => {
         zoomToLayer();
       }}
+      onMoveUp={() => {
+        moveLayer(layerIndex - 1);
+      }}
+      onMoveDown={() => {
+        moveLayer(layerIndex + 1);
+      }}
+      canMoveUp={layerIndex > 0}
+      canMoveDown={layerIndex < layerIds.length - 1}
+      onRefreshLayer={refreshLayerCapabilities}
     />
   );
 };

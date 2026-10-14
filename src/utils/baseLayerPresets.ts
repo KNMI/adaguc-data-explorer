@@ -1,0 +1,77 @@
+import { LayerType } from '@opengeoweb/webmap';
+import { AdagucBaseLayer } from '../store/types';
+
+// Ported from adaguc-viewer's config.js `baseLayerConfiguration` list (its
+// "Select basemaps and overlays" tab) - same predefined base maps/overlays,
+// using the equivalent named tile presets this app's webmap library already
+// ships with (see @opengeoweb/webmap's tileServerSettingsList). Fixed,
+// descriptive ids rather than generateLayerId(): this is a small, static,
+// hand-authored list, not something added/removed at runtime.
+// eslint-disable-next-line import/prefer-default-export
+export const DEFAULT_BASE_LAYERS: AdagucBaseLayer[] = [
+  {
+    id: 'baselayer-naturalearth2',
+    name: 'NaturalEarth2',
+    title: 'World base layer Natural Earth',
+    type: 'twms',
+    layerType: LayerType.baseLayer,
+    enabled: false,
+  },
+  {
+    id: 'baselayer-worldmap',
+    name: 'WorldMap',
+    title: 'KNMI Basemap',
+    type: 'twms',
+    layerType: LayerType.baseLayer,
+    enabled: true,
+  },
+  {
+    id: 'baselayer-arcgis-canvas',
+    name: 'arcGisCanvas',
+    title: 'ESRI ArcGIS Canvas',
+    type: 'twms',
+    layerType: LayerType.baseLayer,
+    enabled: false,
+  },
+  {
+    id: 'baselayer-arcgis-satellite',
+    name: 'arcGisSat',
+    title: 'ESRI ArcGIS Satellite',
+    type: 'twms',
+    layerType: LayerType.baseLayer,
+    enabled: false,
+  },
+  {
+    id: 'baselayer-arcgis-topography',
+    name: 'arcGisTopo',
+    title: 'ESRI ArcGIS Topography',
+    type: 'twms',
+    layerType: LayerType.baseLayer,
+    enabled: false,
+  },
+  {
+    id: 'baselayer-arcgis-ocean',
+    name: 'arcGisOceanBaseMap',
+    title: 'ESRI ArcGIS Ocean',
+    type: 'twms',
+    layerType: LayerType.baseLayer,
+    enabled: false,
+  },
+  {
+    id: 'baselayer-openstreetmap',
+    name: 'OpenStreetMap_Service',
+    title: 'OpenStreetMap',
+    type: 'twms',
+    layerType: LayerType.baseLayer,
+    enabled: false,
+  },
+  {
+    id: 'overlay-countryborders',
+    name: 'countryborders',
+    title: 'World country borders',
+    format: 'image/png',
+    service: 'https://geoservices.knmi.nl/wms?DATASET=baselayers&',
+    layerType: LayerType.overLayer,
+    enabled: true,
+  },
+];

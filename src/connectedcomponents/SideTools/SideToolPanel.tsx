@@ -6,9 +6,9 @@ import { actions, useAppDispatch, useAppSelector } from '../../store/store';
 import { ViewerState } from '../../store/types';
 import AutoWMS from './AutoWMS';
 import { thunks } from '../../store/thunks';
-import GetFeatureInfoPanel from './GetFeatureInfoPanel';
+import QueryPanel from './QueryPanel';
 import LegendPanel from './LegendPanel';
-import TimeSeriesPanel from './TimeSeriesPanel';
+import BaseLayersPanel from './BaseLayersPanel';
 
 export interface ToolPanelInterface {
   toggleExpandToolsPanel: (boolean) => void;
@@ -26,13 +26,12 @@ const SideToolPanel = ({
     setTabPageState(value);
   };
 
-  // GetFeatureInfo and TimeSeries both act on a map-click pin, so this is
-  // the single place deciding whether that pin mode is on - owning it here
-  // (rather than having each of those panels toggle it from its own
-  // `active` prop) avoids a race where both panels' effects fire in the
-  // same render and whichever is declared last in the JSX below wins.
-  const isPinModeActive =
-    tabPage === 'GetFeatureInfo' || tabPage === 'TimeSeries';
+  // GetFeatureInfo and TimeSeries, both subtabs of Query, act on a
+  // map-click pin, so this is the single place deciding whether that pin
+  // mode is on - owning it here (rather than having QueryPanel toggle it
+  // itself) keeps it tied to the main tab regardless of which subtab is
+  // showing.
+  const isPinModeActive = tabPage === 'Query';
   React.useEffect(() => {
     dispatch(
       actions.setGetFeatureInfoActive({ mapId, active: isPinModeActive }),
@@ -98,21 +97,12 @@ const SideToolPanel = ({
             </Button>
             <Button
               size="small"
-              variant={tabPage === 'TimeSeries' ? 'contained' : 'outlined'}
+              variant={tabPage === 'Query' ? 'contained' : 'outlined'}
               onClick={() => {
-                setTabPage('TimeSeries');
+                setTabPage('Query');
               }}
             >
-              TimeSeries
-            </Button>
-            <Button
-              size="small"
-              variant={tabPage === 'GetFeatureInfo' ? 'contained' : 'outlined'}
-              onClick={() => {
-                setTabPage('GetFeatureInfo');
-              }}
-            >
-              GetFeatureInfo
+              Query
             </Button>
             <Button
               size="small"
@@ -122,6 +112,15 @@ const SideToolPanel = ({
               }}
             >
               Legend
+            </Button>
+            <Button
+              size="small"
+              variant={tabPage === 'Baselayers' ? 'contained' : 'outlined'}
+              onClick={() => {
+                setTabPage('Baselayers');
+              }}
+            >
+              Baselayers
             </Button>
           </>
         )}
@@ -148,20 +147,12 @@ const SideToolPanel = ({
           />
         </div>
         <div
-          className="timeseries_panel_container"
+          className="query_panel_container"
           style={{
-            display: tabPage === 'TimeSeries' ? 'block' : 'none',
+            display: tabPage === 'Query' ? 'block' : 'none',
           }}
         >
-          <TimeSeriesPanel mapId={mapId} />
-        </div>
-        <div
-          className="getfeatureinfo_panel"
-          style={{
-            display: tabPage === 'GetFeatureInfo' ? 'block' : 'none',
-          }}
-        >
-          <GetFeatureInfoPanel mapId={mapId} />
+          <QueryPanel mapId={mapId} isActive={tabPage === 'Query'} />
         </div>
         <div
           className="legend_panel_container"
@@ -170,6 +161,14 @@ const SideToolPanel = ({
           }}
         >
           <LegendPanel mapId={mapId} />
+        </div>
+        <div
+          className="baselayers_panel_container"
+          style={{
+            display: tabPage === 'Baselayers' ? 'block' : 'none',
+          }}
+        >
+          <BaseLayersPanel />
         </div>
       </div>
     </div>

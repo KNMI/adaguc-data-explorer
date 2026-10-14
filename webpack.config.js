@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 const path = require('path');
+const webpack = require('webpack');
 const HtmlWebPackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
@@ -46,6 +47,11 @@ module.exports = {
     }),
     new CopyWebpackPlugin({
       patterns: [{ from: 'static' }],
+    }),
+    // Stamped in at build time (not read at runtime), so it reflects
+    // whenever this bundle was actually built, shown in the about dialog.
+    new webpack.DefinePlugin({
+      __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
     }),
   ],
   devServer: {

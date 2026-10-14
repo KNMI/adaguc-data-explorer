@@ -5,6 +5,7 @@ import type { SxProps, Theme } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { actions, useAppDispatch } from '../store/store';
 import { thunks } from '../store/thunks';
+import { makeGoodServiceLink } from '../utils/makeGoodServiceLink';
 
 const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
 const MAX_RECENT_SERVICES = 30;
@@ -55,9 +56,6 @@ const forgetRecentService = (service: string): string[] => {
 const isAutoWMSServiceUrl = (url: string): boolean => /autowms/i.test(url);
 const isOGCWMSServiceUrl = (url: string): boolean =>
   url.toLocaleLowerCase().includes('service=wms');
-
-const makeGoodServiceLink = (service: string): string =>
-  service.indexOf('?') === -1 ? `${service}?` : service;
 
 // A common slip is typing the AutoWMS server's url without the "autowms"
 // path segment it actually serves from (e.g. "https://host/" instead of

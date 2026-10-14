@@ -2,16 +2,18 @@
 import * as React from 'react';
 import { ThemeWrapper } from '@opengeoweb/theme';
 
-import { actions, useAppDispatch } from '../store/store';
+import { actions, useAppDispatch, useAppSelector } from '../store/store';
+import { selectors } from '../store/selectors';
+import { AdagucLayer, ViewerState } from '../store/types';
 import { ReduxMapViewComponent } from './ReduxMapViewComponent';
 import 'react-mosaic-component/react-mosaic-component.css';
 import '../assets/styles.css';
 import { SortableLayerList } from './SortableLayerList';
 import AdagucAppBar from './AdagucAppBar';
 import { handleWindowLocationQueryString } from './handleWindowLocationQueryString';
+import { handleAddLayerHash } from './handleAddLayerHashTag';
 import { AdagucMosaic } from './AdagucMosaic';
 import SideToolPanel from './SideTools/SideToolPanel';
-import LayerDetailsComponent from './LayerDetailsComponent/LayerDetailsComponent';
 
 const ReduxMap = (): React.ReactElement => {
   const dispatch = useAppDispatch();
@@ -24,6 +26,18 @@ const ReduxMap = (): React.ReactElement => {
 
   const [toolsPanelIsExpanded, toggleExpandToolsPanel] = React.useState(true);
 
+  // handleAddLayerHash needs the layers currently on the map (to dedupe
+  // against) every time the hash changes, not just once on mount - a ref
+  // lets the 'hashchange' listener below always read the latest list
+  // without having to tear down and resubscribe it whenever layers change.
+  const mapLayers = useAppSelector((state: ViewerState): AdagucLayer[] =>
+    selectors.getMapLayers(state, mapId),
+  );
+  const mapLayersRef = React.useRef(mapLayers);
+  React.useEffect(() => {
+    mapLayersRef.current = mapLayers;
+  }, [mapLayers]);
+
   // Set first layer as default
   React.useEffect(() => {
     // On a fresh load, maps[mapId] doesn't exist yet - it's otherwise only
@@ -34,7 +48,24 @@ const ReduxMap = (): React.ReactElement => {
     dispatch(actions.registerMap({ mapId }));
     dispatch(actions.removeAllLayers({ mapId }));
     handleWindowLocationQueryString(mapId, dispatch);
+    // Handles a #addlayer(...) hash already present when the page itself
+    // first loads - the listener below only covers it changing afterwards.
+    handleAddLayerHash(mapId, dispatch, mapLayersRef.current);
   }, []);
+
+  // Picks up a #addlayer('<service>','<name>') hash set on this already-
+  // open tab (e.g. from another script/bookmarklet), live - setting
+  // location.hash alone never reloads the page, so nothing else here
+  // would otherwise notice it changed.
+  React.useEffect(() => {
+    const onHashChange = (): void => {
+      handleAddLayerHash(mapId, dispatch, mapLayersRef.current);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+    };
+  }, [mapId, dispatch]);
 
   const mosaicItems: { [viewId: string]: React.ReactElement } = {
     b: (

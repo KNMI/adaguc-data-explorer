@@ -8,14 +8,23 @@ jest.mock('../../store/thunks', () => ({
 }));
 
 // The panels' own content/behaviour isn't under test here - only how
-// SideToolPanel drives the shared pin-mode flag as tabs change.
+// SideToolPanel drives the shared pin-mode flag and the Query tab's
+// `isActive` prop as tabs change. QueryPanel is mocked with a function that
+// records the props it was rendered with, so tests can assert on those.
+const mockQueryPanelRenders: Array<{ mapId: string; isActive: boolean }> = [];
 jest.mock('./AutoWMS', () => ({ __esModule: true, default: () => null }));
-jest.mock('./GetFeatureInfoPanel', () => ({
+jest.mock('./QueryPanel', () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: { mapId: string; isActive: boolean }) => {
+    // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
+    require('react').useEffect(() => {
+      mockQueryPanelRenders.push(props);
+    });
+    return null;
+  },
 }));
 jest.mock('./LegendPanel', () => ({ __esModule: true, default: () => null }));
-jest.mock('./TimeSeriesPanel', () => ({
+jest.mock('./BaseLayersPanel', () => ({
   __esModule: true,
   default: () => null,
 }));
@@ -45,6 +54,7 @@ describe('SideToolPanel', () => {
   let mockDispatch: jest.Mock;
 
   beforeEach(() => {
+    mockQueryPanelRenders.length = 0;
     mockDispatch = jest.fn();
     mockUseAppDispatch.mockReturnValue(mockDispatch);
     mockUseAppSelector.mockImplementation((selector) =>
@@ -63,7 +73,7 @@ describe('SideToolPanel', () => {
       .filter((dispatchedAction) => dispatchedAction.type === PIN_MODE_ACTION)
       .map((dispatchedAction) => dispatchedAction.payload);
 
-  it('turns pin mode on for GetFeatureInfo and off for AutoWMS', () => {
+  it('turns pin mode on for Query and off for AutoWMS', () => {
     render(
       <SideToolPanel toolsPanelIsExpanded toggleExpandToolsPanel={jest.fn()} />,
     );
@@ -75,7 +85,7 @@ describe('SideToolPanel', () => {
     });
 
     act(() => {
-      fireEvent.click(screen.getByText('GetFeatureInfo'));
+      fireEvent.click(screen.getByText('Query'));
     });
     expect(pinModeDispatches().at(-1)).toEqual({
       mapId: 'map1',
@@ -91,31 +101,32 @@ describe('SideToolPanel', () => {
     });
   });
 
-  it('keeps pin mode on when switching directly from GetFeatureInfo to TimeSeries', () => {
+  it('only marks QueryPanel active while the Query tab is shown', () => {
+    // Regression guard: QueryPanel stays mounted (just hidden) while another
+    // main tab is shown, so it relies on this prop - rather than unmounting
+    // - to know when to stop owning the map's histogram box-select mode.
     render(
       <SideToolPanel toolsPanelIsExpanded toggleExpandToolsPanel={jest.fn()} />,
     );
-
-    act(() => {
-      fireEvent.click(screen.getByText('GetFeatureInfo'));
-    });
-    mockDispatch.mockClear();
-
-    act(() => {
-      fireEvent.click(screen.getByText('TimeSeries'));
-    });
-
-    // Regression guard: GetFeatureInfoPanel and TimeSeriesPanel used to each
-    // toggle this flag from their own `active` prop in their own effect,
-    // which raced when both re-rendered in the same commit - switching tabs
-    // could leave pin mode off depending on which panel was declared last
-    // in the JSX. SideToolPanel now derives a single boolean from the tab,
-    // which stays true across this switch (both tabs want pin mode on), so
-    // it correctly doesn't even re-dispatch - above all, it must never
-    // dispatch `active: false` while on either of these two tabs.
-    expect(pinModeDispatches()).not.toContainEqual({
+    expect(mockQueryPanelRenders.at(-1)).toEqual({
       mapId: 'map1',
-      active: false,
+      isActive: false,
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByText('Query'));
+    });
+    expect(mockQueryPanelRenders.at(-1)).toEqual({
+      mapId: 'map1',
+      isActive: true,
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByText('Legend'));
+    });
+    expect(mockQueryPanelRenders.at(-1)).toEqual({
+      mapId: 'map1',
+      isActive: false,
     });
   });
 
@@ -133,9 +144,9 @@ describe('SideToolPanel', () => {
     );
 
     act(() => {
-      fireEvent.click(screen.getByText('GetFeatureInfo'));
+      fireEvent.click(screen.getByText('Query'));
     });
-    expect(screen.getByText('GetFeatureInfo').getAttribute('class')).toContain(
+    expect(screen.getByText('Query').getAttribute('class')).toContain(
       'MuiButton-contained',
     );
 

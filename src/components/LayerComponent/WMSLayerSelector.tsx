@@ -1,6 +1,16 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
-import { Box, FormControl, InputLabel, MenuItem, Select } from '@mui/material';
+import {
+  Box,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
+  Tooltip,
+} from '@mui/material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { LayerTree, generateLayerId } from '@opengeoweb/webmap';
@@ -87,10 +97,34 @@ const WMSLayerSelector = ({
   }
 
   const selectedLayer = layers.find((lins) => lins.name === layerName);
+  const currentIndex = layers.findIndex((lins) => lins.name === layerName);
+  const canCycle = layers.length > 1;
+
+  // Cycles through the flat layer list (not the tree structure shown when
+  // the dropdown is open), wrapping around at either end.
+  const goToLayerAtOffset = (offset: number): void => {
+    if (!canCycle) {
+      return;
+    }
+    const baseIndex = currentIndex === -1 ? 0 : currentIndex;
+    const nextIndex = (baseIndex + offset + layers.length) % layers.length;
+    const nextLayer = layers[nextIndex];
+    if (nextLayer?.name) {
+      onSelectLayer(nextLayer.name);
+    }
+  };
 
   return (
-    <Box sx={{ height: '100%', width: '100%' }}>
-      <FormControl size="small" sx={{ width: 'inherit' }}>
+    <Box
+      sx={{
+        height: '100%',
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.5,
+      }}
+    >
+      <FormControl size="small" sx={{ flexGrow: 1, minWidth: 0 }}>
         <InputLabel size="small">Layer</InputLabel>
         <Select
           size="small"
@@ -104,6 +138,11 @@ const WMSLayerSelector = ({
           onClose={() => {
             setMenuOpen(false);
           }}
+          renderValue={() =>
+            currentIndex !== -1
+              ? `(${currentIndex + 1}/${layers.length}) ${selectedLayer?.title ?? layerName}`
+              : (selectedLayer?.title ?? layerName)
+          }
         >
           <MenuItem
             style={{ display: 'none' }}
@@ -122,6 +161,34 @@ const WMSLayerSelector = ({
           </SimpleTreeView>
         </Select>
       </FormControl>
+      <Tooltip title="Previous layer">
+        <span>
+          <IconButton
+            size="small"
+            aria-label="Previous layer"
+            disabled={!canCycle}
+            onClick={() => {
+              goToLayerAtOffset(-1);
+            }}
+          >
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Tooltip title="Next layer">
+        <span>
+          <IconButton
+            size="small"
+            aria-label="Next layer"
+            disabled={!canCycle}
+            onClick={() => {
+              goToLayerAtOffset(1);
+            }}
+          >
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
     </Box>
   );
 };

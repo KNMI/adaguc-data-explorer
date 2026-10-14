@@ -1,12 +1,25 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
-import { render, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { getWMLayerById } from '@opengeoweb/webmap';
+import { openLayersGetMapImageStore } from '@opengeoweb/webmap-react';
 import { LayerComponent } from './LayerComponent';
 import { AdagucLayer } from '../../store/types';
 
 jest.mock('@opengeoweb/webmap', () => ({
   getWMLayerById: jest.fn(),
+}));
+
+jest.mock('@opengeoweb/webmap-react', () => ({
+  openLayersGetMapImageStore: {
+    loadDuration: { getLoadDurationForId: jest.fn(() => undefined) },
+  },
 }));
 
 jest.mock('./WMSLayerSelector', () => ({
@@ -19,6 +32,10 @@ jest.mock('../WMSComponents/WMSStyleSelector', () => ({
 }));
 
 const mockGetWMLayerById = jest.mocked(getWMLayerById);
+const mockGetLoadDurationForId = jest.mocked(
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  openLayersGetMapImageStore.loadDuration.getLoadDurationForId,
+);
 
 const baseLayer: AdagucLayer = {
   id: 'layer-1',
@@ -48,12 +65,18 @@ const requiredProps = {
   layerToggleAnimation: jest.fn(),
   zoomToLayer: jest.fn(),
   update: jest.fn(),
+  onMoveUp: jest.fn(),
+  onMoveDown: jest.fn(),
+  canMoveUp: true,
+  canMoveDown: true,
+  onRefreshLayer: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('LayerComponent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetWMLayerById.mockReturnValue(undefined);
+    mockGetLoadDurationForId.mockReturnValue(undefined);
   });
 
   it('shows the error icon with a tooltip when the layer has an error', () => {
@@ -86,5 +109,246 @@ describe('LayerComponent', () => {
     render(<LayerComponent {...requiredProps} layer={baseLayer} />);
 
     expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
+  });
+
+  it('calls onMoveUp/onMoveDown when their buttons are clicked', () => {
+    const onMoveUp = jest.fn();
+    const onMoveDown = jest.fn();
+    render(
+      <LayerComponent
+        {...requiredProps}
+        layer={baseLayer}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move layer up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move layer down' }));
+
+    expect(onMoveUp).toHaveBeenCalledTimes(1);
+    expect(onMoveDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the move buttons at the top/bottom of the list', () => {
+    render(
+      <LayerComponent
+        {...requiredProps}
+        layer={baseLayer}
+        canMoveUp={false}
+        canMoveDown={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Move layer up' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Move layer down' }),
+    ).toBeDisabled();
+  });
+
+  it('reloads capabilities and refreshes the view when the refresh button is clicked', async () => {
+    const update = jest.fn();
+    const onRefreshLayer = jest.fn().mockResolvedValue(undefined);
+    render(
+      <LayerComponent
+        {...requiredProps}
+        layer={baseLayer}
+        update={update}
+        onRefreshLayer={onRefreshLayer}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reload layer capabilities' }),
+    );
+
+    expect(onRefreshLayer).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(update).toHaveBeenCalled());
+  });
+
+  it('disables the refresh button while a refresh is in flight', async () => {
+    let resolveRefresh: () => void = () => {};
+    const onRefreshLayer = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    render(
+      <LayerComponent
+        {...requiredProps}
+        layer={baseLayer}
+        onRefreshLayer={onRefreshLayer}
+      />,
+    );
+
+    const refreshButton = screen.getByRole('button', {
+      name: 'Reload layer capabilities',
+    });
+    fireEvent.click(refreshButton);
+
+    expect(refreshButton).toBeDisabled();
+
+    resolveRefresh();
+    await waitFor(() => expect(refreshButton).not.toBeDisabled());
+  });
+
+  it('shows the dataset name when the service url has a DATASET param', () => {
+    render(
+      <LayerComponent
+        {...requiredProps}
+        serviceUrl="https://geoservices.knmi.nl/adagucserver?dataset=adaguc.tests.ahn_utrechtse_heuvelrug_500m&"
+        layer={baseLayer}
+      />,
+    );
+
+    expect(
+      screen.getByText('adaguc.tests.ahn_utrechtse_heuvelrug_500m'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not show a dataset line when the service url has no DATASET param', () => {
+    render(
+      <LayerComponent
+        {...requiredProps}
+        serviceUrl="https://example.com/wms?SERVICE=WMS"
+        layer={baseLayer}
+      />,
+    );
+
+    expect(screen.queryByText(/^Dataset:/)).not.toBeInTheDocument();
+  });
+
+  it('shows a copy-pastable GetCapabilities url built from the service url', () => {
+    render(
+      <LayerComponent
+        {...requiredProps}
+        serviceUrl="https://geoservices.knmi.nl/adagucserver?dataset=adaguc.tests.ahn_utrechtse_heuvelrug_500m&"
+        layer={baseLayer}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        'https://geoservices.knmi.nl/adagucserver?dataset=adaguc.tests.ahn_utrechtse_heuvelrug_500m&SERVICE=WMS&REQUEST=GetCapabilities',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to a sane separator when the service url has no trailing ? or &', () => {
+    render(
+      <LayerComponent
+        {...requiredProps}
+        serviceUrl="https://example.com/wms"
+        layer={baseLayer}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        'https://example.com/wms?SERVICE=WMS&REQUEST=GetCapabilities',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a copy button for the layer name right before the layer dropdown, with a tooltip advertising it', async () => {
+    render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+    // copyButtons[0] is the GetCapabilities url's, still shown in the
+    // header subtitle; [1] is the layer name's, now sitting right before
+    // the (here mocked-out) layer dropdown instead of down in that
+    // subtitle; [2] is the new style name one, before the style dropdown.
+    const copyButtons = screen.getAllByRole('button', { name: 'copy' });
+    expect(copyButtons).toHaveLength(3);
+    fireEvent.mouseOver(copyButtons[1]);
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Copy layer name (air_pressure_msl)',
+    );
+  });
+
+  it('adds a copy button for the style name right before the style dropdown, with a tooltip advertising the style id and layer name', async () => {
+    render(
+      <LayerComponent
+        {...requiredProps}
+        layer={baseLayer}
+        selectedStyleName="style_a"
+      />,
+    );
+
+    const copyButtons = screen.getAllByRole('button', { name: 'copy' });
+    expect(copyButtons).toHaveLength(3);
+    fireEvent.mouseOver(copyButtons[2]);
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Copy style name (style_a) for layer air_pressure_msl',
+    );
+  });
+
+  it('adds a copy button for each dimension value right before its slider, with a tooltip advertising it', async () => {
+    const fakeTimeDimension = {
+      name: 'time',
+      units: '',
+      linked: false,
+      getIndexForValue: jest.fn(() => 0),
+      getValueForIndex: jest.fn(() => '2024-01-01T00:00:00Z'),
+      size: jest.fn(() => 5),
+    };
+    mockGetWMLayerById.mockReturnValue({
+      dimensions: [{ name: 'time', currentValue: '2024-01-01T00:00:00Z' }],
+      getDimension: (name: string) =>
+        name === 'time' ? fakeTimeDimension : undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    render(
+      <LayerComponent
+        {...requiredProps}
+        layer={baseLayer}
+        getDimensionValue={jest.fn(() => '2024-01-01T00:00:00Z')}
+      />,
+    );
+
+    // [0] GetCapabilities url, [1] layer name, [2] style name, [3] the new
+    // dimension value one, right before its (real, unmocked) slider.
+    const copyButtons = screen.getAllByRole('button', { name: 'copy' });
+    expect(copyButtons).toHaveLength(4);
+    fireEvent.mouseOver(copyButtons[3]);
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Copy time value (2024-01-01T00:00:00Z) for layer air_pressure_msl',
+    );
+  });
+
+  it('shows a placeholder for the last GetMap duration until one has completed', () => {
+    render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+    expect(screen.getByText('--- ms')).toBeInTheDocument();
+  });
+
+  it('shows the last GetMap request duration once a GetMap has completed, and keeps it up to date', () => {
+    jest.useFakeTimers();
+    try {
+      mockGetLoadDurationForId.mockReturnValue(undefined);
+      render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+      mockGetLoadDurationForId.mockReturnValue(142);
+      act(() => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(screen.getByText('142 ms')).toBeInTheDocument();
+
+      // A later GetMap request for the same layer replaces the shown
+      // duration, without needing the layer to be remounted.
+      mockGetLoadDurationForId.mockReturnValue(87);
+      act(() => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(screen.getByText('87 ms')).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
