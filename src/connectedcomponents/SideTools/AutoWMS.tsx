@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
 import {
   LayerProps,
@@ -5,6 +6,7 @@ import {
   queryWMSServiceInfo,
 } from '@opengeoweb/webmap';
 import {
+  Autocomplete,
   Box,
   Chip,
   IconButton,
@@ -24,6 +26,7 @@ import {
 import ArrowForwardSharp from '@mui/icons-material/ArrowForwardSharp';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DatasetIcon from '@mui/icons-material/Dataset';
+import DeleteIcon from '@mui/icons-material/Delete';
 import FolderIcon from '@mui/icons-material/Folder';
 import InfoIcon from '@mui/icons-material/Info';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -33,6 +36,12 @@ import { CopyToClipBoard } from '../CopyToClipBoard';
 import AutoWMSLayerDetailsDialog from './AutoWMSLayerDetailsDialog';
 import { AdagucAutoWMSServiceCommand } from '../../store/types';
 import { makeGoodServiceLink } from '../../utils/makeGoodServiceLink';
+import {
+  forgetRecentService,
+  getRecentServices,
+  rememberRecentService,
+} from '../../utils/recentServices';
+import { fetchDefaultAutoWMSService } from '../../utils/defaultAutoWMSService';
 
 const PREVIEW_SIZE_PX = 140;
 
@@ -79,6 +88,18 @@ const AutoWMS = ({
   const [detailsLayer, setDetailsLayer] = React.useState<LayerProps | null>(
     null,
   );
+  // Shared with WMSServiceInput (top bar / "Add data" dialog) via the same
+  // localStorage-backed history, so a url typed in either place shows up
+  // as a suggestion in both.
+  const [recentServices, setRecentServices] = React.useState<string[]>(() =>
+    getRecentServices(),
+  );
+  const [defaultAutoWMSService, setDefaultAutoWMSService] = React.useState<
+    string | undefined
+  >();
+  const handleForgetRecentService = (service: string): void => {
+    setRecentServices(forgetRecentService(service));
+  };
 
   // What is currently typed in the text field, updated on every keystroke.
   const [autoWMSServiceInput, setAutoWMSServiceInput] = React.useState<string>(
@@ -171,6 +192,9 @@ const AutoWMS = ({
     if (isWMSService(service)) {
       setOGCWMSService(service);
     }
+    if (service) {
+      setRecentServices(rememberRecentService(service));
+    }
   };
 
   const fetchNewAutoWMS = (): void => {
@@ -244,19 +268,17 @@ const AutoWMS = ({
 
   React.useEffect(() => {
     // eslint-disable-next-line no-void
-    void fetch('./config.json').then((r) => {
-      r.json()
-        .then((config) => {
-          if (config && config.autowmsurl) {
-            const service =
-              serviceFromQueryString?.length > 0
-                ? serviceFromQueryString
-                : config.autowmsurl;
-            setAutoWMSServiceInput(service);
-            setAutoWMSService(service);
-          }
-        })
-        .catch(() => {});
+    void fetchDefaultAutoWMSService().then((defaultService) => {
+      if (!defaultService) {
+        return;
+      }
+      setDefaultAutoWMSService(defaultService);
+      const service =
+        serviceFromQueryString?.length > 0
+          ? serviceFromQueryString
+          : defaultService;
+      setAutoWMSServiceInput(service);
+      setAutoWMSService(service);
     });
   }, []);
 
@@ -479,25 +501,95 @@ const AutoWMS = ({
     </Stack>
   );
 
+  // The deployment's own default AutoWMS endpoint is always one click away
+  // here, pinned first, rather than only suggested once it happens to
+  // already be in the (locally-stored) recent-services history.
+  const autoWMSOptions = defaultAutoWMSService
+    ? [
+        defaultAutoWMSService,
+        ...recentServices.filter(
+          (service) => service !== defaultAutoWMSService,
+        ),
+      ]
+    : recentServices;
+
   return (
     <div className="autowms_app_container">
       <Paper sx={{ m: 1, p: 1.5, borderRadius: 2 }}>
         <Stack direction="row" spacing={1}>
-          <TextField
+          <Autocomplete
             fullWidth
-            size="small"
-            label="Add AutoWMS or WMS service"
-            variant="outlined"
-            value={autoWMSServiceInput}
-            sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
-            onChange={(e) => {
-              setAutoWMSServiceInput(e.target.value);
+            freeSolo
+            openOnFocus
+            options={autoWMSOptions}
+            inputValue={autoWMSServiceInput}
+            onInputChange={(_event, newValue) => {
+              setAutoWMSServiceInput(newValue);
             }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                fetchNewAutoWMS();
+            // freeSolo's onChange already fires with the typed value on
+            // Enter, the same as it does when an option is clicked - a
+            // separate keydown handler here would load it a second time.
+            onChange={(_event, newValue) => {
+              if (typeof newValue === 'string' && newValue) {
+                loadAutoWMSService(newValue);
               }
             }}
+            sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
+            renderOption={(optionProps, option) => {
+              // MUI puts `key` in optionProps - spreading it alongside an
+              // explicit `key` prop below would warn, so it's pulled out
+              // here.
+              const { key, ...rest } = optionProps;
+              return (
+                <li
+                  key={key}
+                  {...rest}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {option}
+                  </span>
+                  {option !== defaultAutoWMSService && (
+                    <IconButton
+                      size="small"
+                      aria-label={`Remove ${option} from recent services`}
+                      // The listbox selects an option on mousedown, before
+                      // the click this is actually waiting for ever fires -
+                      // without stopping it here too, clicking this button
+                      // would select (and load) the option it's meant to
+                      // delete instead.
+                      onMouseDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleForgetRecentService(option);
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </li>
+              );
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                size="small"
+                label="Add AutoWMS or WMS service"
+                variant="outlined"
+              />
+            )}
           />
           <Tooltip title="Load (you can also reference this via the ?autowms=<url> querystring in the browser location bar">
             <IconButton

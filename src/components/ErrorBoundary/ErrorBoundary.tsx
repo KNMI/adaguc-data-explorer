@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Card, Tooltip, Typography } from '@mui/material';
+import { Card, IconButton, Tooltip, Typography } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 export interface ErrorBoundaryProps {
@@ -16,6 +17,13 @@ export interface ErrorBoundaryProps {
   // inside the map view, where children are rendered over the OL canvas).
   // eslint-disable-next-line react/require-default-props
   fallbackStyle?: React.CSSProperties;
+  // Shows a remove button in the fallback itself when given - the whole
+  // point of catching the error here is that the broken layer's own UI
+  // (including its normal remove button) never renders at all, which
+  // otherwise leaves no way to get rid of it again except reloading the
+  // whole page and hoping it doesn't come back from a saved permalink.
+  // eslint-disable-next-line react/require-default-props
+  onRemove?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -47,27 +55,42 @@ export class ErrorBoundary extends React.Component<
 
   render(): React.ReactNode {
     const { error } = this.state;
-    const { children, fallbackMessage, fallbackStyle } = this.props;
+    const { children, fallbackMessage, fallbackStyle, onRemove } = this.props;
 
     if (error) {
       return (
-        <Tooltip title={error.message}>
-          <Card
-            className="layercomponent_item"
-            style={{
-              padding: '6px 10px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              ...fallbackStyle,
-            }}
-          >
+        <Card
+          className="layercomponent_item"
+          style={{
+            padding: '6px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            ...fallbackStyle,
+          }}
+        >
+          <Tooltip title={error.message}>
             <WarningAmberIcon fontSize="small" sx={{ color: 'grey.500' }} />
-            <Typography variant="body2" color="text.secondary">
-              {fallbackMessage}
-            </Typography>
-          </Card>
-        </Tooltip>
+          </Tooltip>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ flexGrow: 1, minWidth: 0 }}
+          >
+            {fallbackMessage}
+          </Typography>
+          {onRemove && (
+            <Tooltip title="Remove this layer">
+              <IconButton
+                size="small"
+                aria-label="Remove layer"
+                onClick={onRemove}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Card>
       );
     }
 

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ErrorBoundary } from './ErrorBoundary';
 
 const Bomb = (): React.ReactElement => {
@@ -33,6 +33,35 @@ describe('ErrorBoundary', () => {
     );
     expect(screen.getByText('Layer unavailable')).toBeInTheDocument();
     expect(screen.queryByText('content')).not.toBeInTheDocument();
+  });
+
+  it('shows a remove button in the fallback when onRemove is given, and calls it on click', () => {
+    // Regression guard: the whole point of catching the error here is
+    // that the broken item's own UI - including its normal remove button
+    // - never rendered at all. Without this, there was no way left to get
+    // rid of it (e.g. a layer whose own selector throws on every render).
+    const onRemove = jest.fn();
+    render(
+      <ErrorBoundary fallbackMessage="Layer unavailable" onRemove={onRemove}>
+        <Bomb />
+      </ErrorBoundary>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove layer' }));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show a remove button in the fallback when onRemove is not given', () => {
+    render(
+      <ErrorBoundary fallbackMessage="Layer unavailable">
+        <Bomb />
+      </ErrorBoundary>,
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Remove layer' }),
+    ).not.toBeInTheDocument();
   });
 
   it('calls onError with the thrown error', () => {

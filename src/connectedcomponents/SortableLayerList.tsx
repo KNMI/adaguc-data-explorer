@@ -56,7 +56,13 @@ export const SortableLayerList = ({
       >
         {layersInMap.map((layerId, k): React.ReactElement => {
           return (
-            <ErrorBoundary key={layerId} fallbackMessage="Layer unavailable">
+            <ErrorBoundary
+              key={layerId}
+              fallbackMessage="Layer unavailable"
+              onRemove={() => {
+                dispatch(actions.removeLayer({ mapId, layerIndex: k }));
+              }}
+            >
               <ReduxLayerComponent
                 layerId={layerId}
                 mapId={mapId}

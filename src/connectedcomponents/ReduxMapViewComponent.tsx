@@ -282,6 +282,9 @@ export const ReduxMapViewComponent = ({
               left: 8,
               zIndex: 1,
             }}
+            onRemove={() => {
+              dispatch(actions.removeLayer({ mapId, layerIndex: index }));
+            }}
           >
             <ReduxMapLayer
               layer={layer}

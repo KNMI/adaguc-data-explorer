@@ -6,49 +6,12 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { actions, useAppDispatch } from '../store/store';
 import { thunks } from '../store/thunks';
 import { makeGoodServiceLink } from '../utils/makeGoodServiceLink';
-
-const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
-const MAX_RECENT_SERVICES = 30;
-
-// localStorage may be disabled (private browsing) or the value corrupted -
-// either way, the recent-services list is a convenience, not something
-// worth failing the input over.
-const getRecentServices = (): string[] => {
-  try {
-    const raw = window.localStorage.getItem(RECENT_SERVICES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === 'string')
-      : [];
-  } catch {
-    return [];
-  }
-};
-
-const rememberRecentService = (service: string): string[] => {
-  const updated = [
-    service,
-    ...getRecentServices().filter((entry) => entry !== service),
-  ].slice(0, MAX_RECENT_SERVICES);
-  try {
-    window.localStorage.setItem(RECENT_SERVICES_KEY, JSON.stringify(updated));
-  } catch {
-    // Storage may be disabled/full - history is a convenience, not
-    // something worth failing the input over.
-  }
-  return updated;
-};
-
-const forgetRecentService = (service: string): string[] => {
-  const updated = getRecentServices().filter((entry) => entry !== service);
-  try {
-    window.localStorage.setItem(RECENT_SERVICES_KEY, JSON.stringify(updated));
-  } catch {
-    // Storage may be disabled/full - history is a convenience, not
-    // something worth failing the input over.
-  }
-  return updated;
-};
+import {
+  forgetRecentService,
+  getRecentServices,
+  rememberRecentService,
+} from '../utils/recentServices';
+import { fetchDefaultAutoWMSService } from '../utils/defaultAutoWMSService';
 
 // AutoWMS explorer endpoints (see AutoWMS.tsx) are plain file-listing
 // services, not OGC WMS ones - a url naming "autowms" always opens the
@@ -104,10 +67,29 @@ const WMSServiceInput = ({
   const [recentServices, setRecentServices] = React.useState<string[]>(() =>
     getRecentServices(),
   );
+  const [defaultAutoWMSService, setDefaultAutoWMSService] = React.useState<
+    string | undefined
+  >();
+  React.useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    fetchDefaultAutoWMSService().then(setDefaultAutoWMSService);
+  }, []);
 
   const handleForgetRecentService = (service: string): void => {
     setRecentServices(forgetRecentService(service));
   };
+
+  // The deployment's own default AutoWMS endpoint is always one click away
+  // here, pinned first, rather than only suggested once it happens to
+  // already be in the (locally-stored) recent-services history.
+  const options = defaultAutoWMSService
+    ? [
+        defaultAutoWMSService,
+        ...recentServices.filter(
+          (service) => service !== defaultAutoWMSService,
+        ),
+      ]
+    : recentServices;
 
   const submitService = (service: string): void => {
     if (!service) {
@@ -156,7 +138,7 @@ const WMSServiceInput = ({
     <Autocomplete
       freeSolo
       openOnFocus
-      options={recentServices}
+      options={options}
       inputValue={value}
       onInputChange={(_event, newValue) => {
         setValue(newValue);
@@ -193,23 +175,25 @@ const WMSServiceInput = ({
             >
               {option}
             </span>
-            <IconButton
-              size="small"
-              aria-label={`Remove ${option} from recent services`}
-              // The listbox selects an option on mousedown, before the
-              // click this is actually waiting for ever fires - without
-              // stopping it here too, clicking this button would select
-              // (and submit) the option it's meant to delete instead.
-              onMouseDown={(event) => {
-                event.stopPropagation();
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleForgetRecentService(option);
-              }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+            {option !== defaultAutoWMSService && (
+              <IconButton
+                size="small"
+                aria-label={`Remove ${option} from recent services`}
+                // The listbox selects an option on mousedown, before the
+                // click this is actually waiting for ever fires - without
+                // stopping it here too, clicking this button would select
+                // (and submit) the option it's meant to delete instead.
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleForgetRecentService(option);
+                }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            )}
           </li>
         );
       }}

@@ -63,6 +63,7 @@ const flushConfigFetch = async (mockFetch: jest.Mock): Promise<void> => {
 
 describe('AutoWMS', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mockQueryWMSLayers.mockReset();
     mockQueryWMSServiceInfo.mockReset();
   });
@@ -522,5 +523,128 @@ describe('AutoWMS', () => {
     expect(mockFetch).not.toHaveBeenCalledWith(
       `${AUTOWMS_URL}request=getfiles&path=`,
     );
+  });
+
+  it('remembers a loaded service in localStorage and shows it as a suggestion', async () => {
+    // Same "recent services" history as WMSServiceInput (top bar/"Add
+    // data" dialog) - a url loaded here should be just as easy to get back
+    // to later, and show up wherever that shared history is used.
+    const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitForLoadingToFinish();
+
+    expect(
+      JSON.parse(window.localStorage.getItem(RECENT_SERVICES_KEY) || '[]'),
+    ).toEqual([AUTOWMS_URL]);
+
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.focus(input);
+    expect(
+      screen.getByRole('option', { name: AUTOWMS_URL }),
+    ).toBeInTheDocument();
+  });
+
+  it('removes a remembered service when its delete icon is clicked, without loading it', async () => {
+    const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
+    window.localStorage.setItem(
+      RECENT_SERVICES_KEY,
+      JSON.stringify(['https://a/autowms?', 'https://b/autowms?']),
+    );
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+    mockFetch.mockClear();
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.focus(input);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Remove https://a/autowms? from recent services',
+      }),
+    );
+
+    expect(
+      screen.queryByRole('option', { name: 'https://a/autowms?' }),
+    ).not.toBeInTheDocument();
+    expect(
+      JSON.parse(window.localStorage.getItem(RECENT_SERVICES_KEY) || '[]'),
+    ).toEqual(['https://b/autowms?']);
+    // Deleting a recent entry must not also load it.
+    expect(mockFetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('request=getfiles'),
+    );
+    expect(input).toHaveValue('');
+  });
+
+  it('pins the deployment default AutoWMS endpoint as the first option, without a delete icon', async () => {
+    // Same pinned default as WMSServiceInput (top bar/"Add data" dialog) -
+    // it's always one click away here too, not just suggested once it
+    // happens to already be in the (locally-stored) recent-services
+    // history.
+    const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
+    const DEFAULT_URL = 'https://geoservices.knmi.nl/autowms?';
+    window.localStorage.setItem(
+      RECENT_SERVICES_KEY,
+      JSON.stringify(['https://a/autowms?']),
+    );
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({ autowmsurl: DEFAULT_URL });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.focus(input);
+
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveTextContent(DEFAULT_URL);
+    expect(options[1]).toHaveTextContent('https://a/autowms?');
+    expect(
+      screen.queryByRole('button', {
+        name: `Remove ${DEFAULT_URL} from recent services`,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not duplicate the default AutoWMS endpoint when it is also in recent history', async () => {
+    const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
+    const DEFAULT_URL = 'https://geoservices.knmi.nl/autowms?';
+    window.localStorage.setItem(
+      RECENT_SERVICES_KEY,
+      JSON.stringify([DEFAULT_URL]),
+    );
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({ autowmsurl: DEFAULT_URL });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.focus(input);
+
+    expect(screen.getAllByRole('option')).toHaveLength(1);
   });
 });

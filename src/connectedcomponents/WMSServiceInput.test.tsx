@@ -261,4 +261,60 @@ describe('WMSServiceInput', () => {
 
     expect(onHandled).toHaveBeenCalledTimes(1);
   });
+
+  it('pins the deployment default AutoWMS endpoint as the first option, without a delete icon', async () => {
+    window.localStorage.setItem(
+      RECENT_SERVICES_KEY,
+      JSON.stringify(['https://a/autowms?']),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({ autowmsurl: 'https://geoservices.knmi.nl/autowms?' }),
+    }) as unknown as typeof fetch;
+
+    render(<WMSServiceInput />);
+    const input = screen.getByPlaceholderText(PLACEHOLDER);
+
+    await waitFor(() => {
+      fireEvent.focus(input);
+      expect(
+        screen.getByRole('option', {
+          name: 'https://geoservices.knmi.nl/autowms?',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveTextContent(
+      'https://geoservices.knmi.nl/autowms?',
+    );
+    expect(options[1]).toHaveTextContent('https://a/autowms?');
+
+    // The pinned default isn't part of the (locally-stored) recent list,
+    // so it can't be removed the same way a real recent entry can.
+    expect(
+      screen.queryByRole('button', {
+        name: 'Remove https://geoservices.knmi.nl/autowms? from recent services',
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not duplicate the default AutoWMS endpoint when it is also in recent history', async () => {
+    window.localStorage.setItem(
+      RECENT_SERVICES_KEY,
+      JSON.stringify(['https://geoservices.knmi.nl/autowms?']),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({ autowmsurl: 'https://geoservices.knmi.nl/autowms?' }),
+    }) as unknown as typeof fetch;
+
+    render(<WMSServiceInput />);
+    const input = screen.getByPlaceholderText(PLACEHOLDER);
+
+    await waitFor(() => {
+      fireEvent.focus(input);
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+    });
+  });
 });
