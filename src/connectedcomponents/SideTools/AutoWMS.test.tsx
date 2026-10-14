@@ -193,6 +193,62 @@ describe('AutoWMS', () => {
     expect(addLayer).toHaveBeenCalledWith(WMS_URL, 'layer1');
   });
 
+  it('ignores a stale GetCapabilities response after the service changes again before it resolves', async () => {
+    // Regression guard: switching away from a WMS service (e.g. to an
+    // AutoWMS explorer url) while its GetCapabilities fetch is still in
+    // flight used to let that stale response populate `layers` anyway -
+    // with `ogcWMSService` by then cleared back to '', each layer's
+    // preview image url (built as `${ogcWMSService}&LAYERS=...`) collapsed
+    // to a bare "&LAYERS=..." that the browser resolved against the
+    // current page instead of the actual WMS service.
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    let resolveFirstLayers: (layers: LayerProps[]) => void = () => {};
+    const firstLayersPromise = new Promise<LayerProps[]>((resolve) => {
+      resolveFirstLayers = resolve;
+    });
+    mockQueryWMSLayers.mockReturnValueOnce(firstLayersPromise);
+    mockQueryWMSServiceInfo.mockResolvedValueOnce({
+      abstract: '',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: WMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    await waitFor(() => {
+      expect(mockQueryWMSLayers).toHaveBeenCalledWith(
+        `${WMS_URL}SERVICE=WMS&REQUEST=GetCapabilities`,
+        true,
+      );
+    });
+
+    // Before that resolves, switch to an AutoWMS-looking service instead -
+    // this clears ogcWMSService back to '' synchronously.
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    await waitForLoadingToFinish();
+
+    // Now let the stale WMS layers response resolve.
+    await act(async () => {
+      resolveFirstLayers([
+        {
+          name: 'layer1',
+          title: 'Layer One',
+          styles: [],
+        } as unknown as LayerProps,
+      ]);
+      await firstLayersPromise;
+    });
+
+    expect(screen.queryByText('Layer One')).not.toBeInTheDocument();
+    expect(screen.queryByAltText('Layer One')).not.toBeInTheDocument();
+  });
+
   it('shows and hides the layer details popup without adding the layer', async () => {
     const mockFetch = makeFetchMock(configJsonHandler);
     global.fetch = mockFetch as unknown as typeof fetch;
@@ -467,6 +523,72 @@ describe('AutoWMS', () => {
     });
     expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
     await waitForLoadingToFinish();
+  });
+
+  it("shows the selected dataset's own full path, not doubled up with the folder path", async () => {
+    // Regression guard: adaguc-server's getfiles endpoint always returns a
+    // full path from the root for every item - including leaves - not a
+    // bare filename relative to the current folder (confirmed directly
+    // against a real deployment: clicking a dataset inside
+    // "/adaguc::datasets" returns e.g.
+    // "/adaguc::datasets/10-minute-in-situ-meteorological-observations.xml"
+    // as its own "path"). The breadcrumb used to render `path + currentLeaf`
+    // assuming currentLeaf was just a suffix, so selecting a leaf showed
+    // the parent folder's path twice.
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=/adaguc::datasets')) {
+        return Promise.resolve({
+          result: [
+            {
+              path: '/adaguc::datasets/10-minute-in-situ-meteorological-observations.xml',
+              name: '10-minute-in-situ-meteorological-observations',
+              leaf: true,
+              adaguc:
+                'https://example.com/adaguc-server/adagucserver?dataset=10-minute-in-situ-meteorological-observations&',
+            },
+          ],
+        });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [
+            {
+              path: '/adaguc::datasets',
+              name: 'adaguc::datasets',
+              leaf: false,
+            },
+          ],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: '',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    fireEvent.click(await screen.findByText('adaguc::datasets'));
+    fireEvent.click(
+      await screen.findByText('10-minute-in-situ-meteorological-observations'),
+    );
+    await waitForLoadingToFinish();
+
+    expect(
+      screen.getByText(
+        'Current path: /adaguc::datasets/10-minute-in-situ-meteorological-observations.xml',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('loads an externally requested service, bypassing manual typing', async () => {

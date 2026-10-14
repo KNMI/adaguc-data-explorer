@@ -147,18 +147,35 @@ const AutoWMS = ({
       });
   };
 
+  // Guards against a stale GetCapabilities response: if the service
+  // changes (or clears) again before an earlier fetch resolves, that
+  // fetch's result must not overwrite the newer state - otherwise
+  // `layers` can end up populated from an old service while
+  // `ogcWMSService` is already empty/different, and each layer's preview
+  // image url (built as `${ogcWMSService}&LAYERS=...`) collapses to a bare
+  // "&LAYERS=..." the browser then resolves against the current page.
+  const ogcServiceRequestIdRef = React.useRef(0);
+
   const fetchLayersFromOGCWMSService = (): void => {
+    ogcServiceRequestIdRef.current += 1;
+    const requestId = ogcServiceRequestIdRef.current;
     if (ogcWMSService.length > 0) {
       const wmsLink = `${ogcWMSService}SERVICE=WMS&REQUEST=GetCapabilities`;
       setLayers([]);
       setLoading(true);
       Promise.all([queryWMSLayers(wmsLink, true), queryWMSServiceInfo(wmsLink)])
         .then(([_layers, serviceInfo]) => {
+          if (ogcServiceRequestIdRef.current !== requestId) {
+            return;
+          }
           setLoading(false);
           setLayers(_layers);
           setWMSAbstract(serviceInfo.abstract);
         })
         .catch((f) => {
+          if (ogcServiceRequestIdRef.current !== requestId) {
+            return;
+          }
           setLoading(false);
           handleError(f);
         });
@@ -619,8 +636,10 @@ const AutoWMS = ({
             noWrap
             sx={{ fontFamily: 'monospace', minWidth: 0 }}
           >
-            Current path: {path}
-            {currentLeaf}
+            {/* currentLeaf (like path) is always a full path from the
+                root, not a bare filename to append to path - showing both
+                together would double up the parent segments. */}
+            Current path: {currentLeaf || path}
           </Typography>
           <Stack direction="row" spacing={0.5} flexShrink={0}>
             <Tooltip title="Up one level">

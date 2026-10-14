@@ -9,6 +9,11 @@ import { AdagucLayer } from '../store/types';
 
 export const ANIMATION_INTERVAL_MS = 300;
 const ANIMATION_NUM_STEPS = 24;
+// However close to the latest step the slider already is, the animated
+// window still needs to cover at least this many steps - otherwise
+// starting the animation right at (or near) the latest value produced a
+// window of just 1-2 steps, which looks like nothing happens at all.
+const MIN_ANIMATION_STEPS = 12;
 
 // useAnimationForLayer always loops over its last `numStepsTillLatest` time
 // steps, counted back from the dimension's own latest value - it has no
@@ -28,7 +33,15 @@ export const getNumStepsFromCurrentTime = (layer: AdagucLayer): number => {
   if (currentIndex < 0) {
     return ANIMATION_NUM_STEPS;
   }
-  return Math.max(1, timeDimension.size() - currentIndex);
+  const totalSteps = timeDimension.size();
+  const stepsFromCurrentToLatest = totalSteps - currentIndex;
+  return Math.max(
+    1,
+    Math.min(
+      totalSteps,
+      Math.max(MIN_ANIMATION_STEPS, stepsFromCurrentToLatest),
+    ),
+  );
 };
 
 export interface AnimationTick {

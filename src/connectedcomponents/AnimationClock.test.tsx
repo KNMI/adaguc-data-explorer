@@ -64,6 +64,48 @@ describe('getNumStepsFromCurrentTime', () => {
   it('falls back to the default animation window when the current time cannot be resolved', () => {
     expect(getNumStepsFromCurrentTime(layer)).toBe(24);
   });
+
+  it('still animates at least 12 steps when the slider is sitting at the latest value', () => {
+    // Regression guard: size(24) - currentIndex(23) = 1, which used to be
+    // passed straight through - a 1-step animation window looks like
+    // nothing happens at all when pressing animate at the end of the
+    // slider.
+    const layerAtLatestStep: AdagucLayer = {
+      ...layer,
+      dimensions: [{ name: 'time', currentValue: '2025-01-01T23:00:00Z' }],
+    };
+    const fakeTimeDimension = {
+      getIndexForValue: jest.fn(() => 23),
+      size: jest.fn(() => 24),
+    };
+    mockGetWMLayerById.mockReturnValue({
+      getDimension: (name: string) =>
+        name === 'time' ? fakeTimeDimension : undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    expect(getNumStepsFromCurrentTime(layerAtLatestStep)).toBe(12);
+  });
+
+  it('does not ask for more steps than the dimension actually has', () => {
+    // Only 5 time steps exist in total - 12 isn't achievable, so the whole
+    // dimension is the best this can offer.
+    const layerWithFewSteps: AdagucLayer = {
+      ...layer,
+      dimensions: [{ name: 'time', currentValue: '2025-01-01T04:00:00Z' }],
+    };
+    const fakeTimeDimension = {
+      getIndexForValue: jest.fn(() => 4),
+      size: jest.fn(() => 5),
+    };
+    mockGetWMLayerById.mockReturnValue({
+      getDimension: (name: string) =>
+        name === 'time' ? fakeTimeDimension : undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    expect(getNumStepsFromCurrentTime(layerWithFewSteps)).toBe(5);
+  });
 });
 
 describe('AnimationClock', () => {
