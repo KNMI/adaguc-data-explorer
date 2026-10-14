@@ -277,6 +277,160 @@ describe('AutoWMS', () => {
     });
   });
 
+  it('matches a filter whose words appear scattered across the title, not contiguously', async () => {
+    // "air press sea" never appears as one literal substring of this title
+    // (it's "...air pressure at mean sea..."), but every individual word
+    // in the filter does appear somewhere in it - each word matching
+    // independently (not the whole phrase as a single substring) is what
+    // should find it.
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([
+      {
+        name: 'air_pressure_msl',
+        title: 'Air Pressure at Mean Sea Level 1 Min Mean (pp)',
+        styles: [],
+      },
+      { name: 'layer2', title: 'Wind Speed', styles: [] },
+    ] as unknown as LayerProps[]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: '',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: WMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    expect(
+      await screen.findByText('Air Pressure at Mean Sea Level 1 Min Mean (pp)'),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter layers'), {
+      target: { value: 'air press sea' },
+    });
+
+    expect(
+      screen.getByText('Air Pressure at Mean Sea Level 1 Min Mean (pp)'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Wind Speed')).not.toBeInTheDocument();
+  });
+
+  it('filters the layer list by title or name', async () => {
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([
+      {
+        name: 'temperature-2m/nearest',
+        title: 'Temperature 2m',
+        styles: [],
+      },
+      { name: 'layer2', title: 'Air pressure', styles: [] },
+      {
+        name: 'temperature-sfc/nearest',
+        title: 'Temperature surface',
+        styles: [],
+      },
+    ] as unknown as LayerProps[]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: '',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: WMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    expect(await screen.findByText('Temperature 2m')).toBeInTheDocument();
+    expect(screen.getByText('Air pressure')).toBeInTheDocument();
+    expect(screen.getByText('Temperature surface')).toBeInTheDocument();
+
+    const filterInput = screen.getByLabelText('Filter layers');
+    fireEvent.change(filterInput, { target: { value: 'Temperature 2m' } });
+
+    expect(screen.getByText('Temperature 2m')).toBeInTheDocument();
+    expect(screen.queryByText('Air pressure')).not.toBeInTheDocument();
+    expect(screen.queryByText('Temperature surface')).not.toBeInTheDocument();
+
+    // Matching against the layer name too (not just the title) - this one
+    // only matches via its name, not its title.
+    fireEvent.change(filterInput, { target: { value: 'layer2' } });
+    expect(screen.getByText('Air pressure')).toBeInTheDocument();
+    expect(screen.queryByText('Temperature 2m')).not.toBeInTheDocument();
+
+    fireEvent.change(filterInput, { target: { value: '' } });
+    expect(screen.getByText('Temperature 2m')).toBeInTheDocument();
+    expect(screen.getByText('Air pressure')).toBeInTheDocument();
+    expect(screen.getByText('Temperature surface')).toBeInTheDocument();
+  });
+
+  it('shows a no-match message instead of the list when nothing matches the filter', async () => {
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([
+      { name: 'layer1', title: 'Layer One', styles: [] },
+    ] as unknown as LayerProps[]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: '',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: WMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    expect(await screen.findByText('Layer One')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter layers'), {
+      target: { value: 'nothing matches this' },
+    });
+
+    expect(screen.queryByText('Layer One')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/No layers match "nothing matches this"/),
+    ).toBeInTheDocument();
+  });
+
+  it('clears the filter when a different service is loaded', async () => {
+    // Regression guard: a filter left over from a previous service would
+    // otherwise silently hide every layer of the newly loaded one.
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([
+      { name: 'layer1', title: 'Layer One', styles: [] },
+    ] as unknown as LayerProps[]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: '',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: WMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    expect(await screen.findByText('Layer One')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter layers'), {
+      target: { value: 'Layer One' },
+    });
+    expect(screen.getByLabelText('Filter layers')).toHaveValue('Layer One');
+
+    mockQueryWMSLayers.mockResolvedValue([
+      { name: 'layer2', title: 'A Different Layer', styles: [] },
+    ] as unknown as LayerProps[]);
+    const otherServiceUrl = 'http://example.com/other-wms?SERVICE=WMS&';
+    fireEvent.change(input, { target: { value: otherServiceUrl } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    expect(await screen.findByText('A Different Layer')).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter layers')).toHaveValue('');
+  });
+
   it('navigates into a subfolder of the AutoWMS explorer', async () => {
     const mockFetch = makeFetchMock((url) => {
       if (url === './config.json') {

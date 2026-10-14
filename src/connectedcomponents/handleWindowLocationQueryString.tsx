@@ -123,7 +123,12 @@ export const handleWindowLocationQueryString = (
 
 export const makePermaLink = (mapId: string, map: AdagucMap): string => {
   if (!map) return '';
-  const currentOrigin = window.location.origin;
+  // origin alone drops the path the app is actually served under - fine on
+  // a site served from the domain root, but this app is also deployed as a
+  // GitHub Pages *project* site (e.g. https://knmi.github.io/adaguc-data-
+  // explorer/), where that path is the difference between a working
+  // permalink and one that 404s at the bare domain root.
+  const currentOrigin = window.location.origin + window.location.pathname;
   const { srs, bbox } = map.view;
   const projectionLink = `srs=${URLEncode(srs)}&bbox=${bbox.left},${bbox.bottom},${bbox.right},${bbox.top}`;
   const { layers } = map;

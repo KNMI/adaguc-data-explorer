@@ -16,6 +16,9 @@
   "_eslintConfig": {
     "extends": "react-app"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
@@ -57,7 +60,7 @@
     "@storybook/builder-webpack5": "^8.6.18",
     "@storybook/react": "^8.6.18",
     "@storybook/react-webpack5": "^8.6.18",
-    "@testing-library/jest-dom": "^6.10.0",
+    "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "^16.3.3",
     "@types/jest": "^30.0.0",
     "@types/lodash": "^4.17.25",

@@ -21,11 +21,16 @@ const LayerDetailDialog = ({
   return (
     <Popper
       style={{
-        position: 'absolute',
-        left: '10px',
-        top: '50px',
+        position: 'fixed',
+        left: '50%',
+        top: '50%',
+        transform: 'translate(-50%, -50%)',
         zIndex: 2000,
         background: 'white',
+        border: '1px solid rgba(0, 0, 0, 0.3)',
+        height: '80vh',
+        width: '80vw',
+        overflow: 'auto',
       }}
       open={isDialogOpen}
     >
@@ -44,7 +49,7 @@ const LayerDetailDialog = ({
       >
         <CloseIcon />
       </IconButton>
-      <DialogContent style={{ maxHeight: '60vh', maxWidth: '60vw' }}>
+      <DialogContent>
         <LayerDetailsComponent mapId={mapId} layerId={layerId} />
       </DialogContent>
     </Popper>

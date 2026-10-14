@@ -8,6 +8,7 @@ import {
   Box,
   Chip,
   IconButton,
+  InputAdornment,
   LinearProgress,
   List,
   ListItemButton,
@@ -25,6 +26,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DatasetIcon from '@mui/icons-material/Dataset';
 import FolderIcon from '@mui/icons-material/Folder';
 import InfoIcon from '@mui/icons-material/Info';
+import ClearIcon from '@mui/icons-material/Clear';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { alpha } from '@mui/material/styles';
 import { CopyToClipBoard } from '../CopyToClipBoard';
@@ -73,6 +75,7 @@ const AutoWMS = ({
   const [currentLeaf, changeLeaf] = React.useState<string>('');
   const [layers, setLayers] = React.useState<LayerProps[]>([]);
   const [wmsAbstract, setWMSAbstract] = React.useState<string>('');
+  const [layerFilter, setLayerFilter] = React.useState<string>('');
   const [detailsLayer, setDetailsLayer] = React.useState<LayerProps | null>(
     null,
   );
@@ -208,6 +211,9 @@ const AutoWMS = ({
 
   React.useEffect(() => {
     fetchLayersFromOGCWMSService();
+    // A filter left over from a previous service would otherwise silently
+    // hide every layer of the newly loaded one.
+    setLayerFilter('');
   }, [ogcWMSService]);
 
   // Reveals (and so starts loading) at most MAX_PREVIEW_IMAGES_PER_SECOND
@@ -320,9 +326,75 @@ const AutoWMS = ({
     </Box>
   );
 
+  // Many services (e.g. SAT) list hundreds of layers - matching against
+  // both title and name covers both "Temperature 2m" (title) and
+  // "temperature-2m" (name) style searches. Split into words and require
+  // each one to appear SOMEWHERE in the title/name (not the whole query as
+  // one literal substring), so "air press sea" finds "Air Pressure at Mean
+  // Sea Level" even though "press sea" never appears contiguously in that
+  // title. Keeping each entry's original index (rather than the
+  // post-filter one) means the progressive-preview-reveal effect below -
+  // which only ever counts up against the full, unfiltered list - still
+  // lines up with which images have actually started loading.
+  const filterTokens = layerFilter
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  const filteredLayers = layers
+    .map((layer, originalIndex) => ({ layer, originalIndex }))
+    .filter(({ layer }) => {
+      if (filterTokens.length === 0) {
+        return true;
+      }
+      const searchableText =
+        `${layer.title ?? ''} ${layer.name ?? ''}`.toLowerCase();
+      return filterTokens.every((token) => searchableText.includes(token));
+    });
+
+  const layerFilterBox = layers?.length > 0 && (
+    <Box sx={{ px: 1.5, pt: 1.5 }}>
+      <TextField
+        fullWidth
+        size="small"
+        label="Filter layers"
+        placeholder="e.g. temperature"
+        variant="outlined"
+        value={layerFilter}
+        onChange={(e) => {
+          setLayerFilter(e.target.value);
+        }}
+        InputProps={{
+          endAdornment: layerFilter.length > 0 && (
+            <InputAdornment position="end">
+              <IconButton
+                size="small"
+                aria-label="Clear filter"
+                onClick={() => {
+                  setLayerFilter('');
+                }}
+              >
+                <ClearIcon fontSize="small" />
+              </IconButton>
+            </InputAdornment>
+          ),
+        }}
+      />
+    </Box>
+  );
+
   const autowmsWMSService = layers?.length > 0 && (
     <Stack spacing={1} sx={{ p: 1.5 }}>
-      {layers.map((layer: LayerProps, i) => {
+      {filteredLayers.length === 0 && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ px: 0.5, py: 1 }}
+        >
+          No layers match &quot;{layerFilter}&quot;.
+        </Typography>
+      )}
+      {filteredLayers.map(({ layer, originalIndex }) => {
         const wmsImage = `${ogcWMSService}&LAYERS=${layer.name}&WIDTH=${
           PREVIEW_SIZE_PX * 2
         }&HEIGHT=${
@@ -358,7 +430,7 @@ const AutoWMS = ({
                 bgcolor: 'background.default',
               }}
             >
-              {i < visiblePreviewCount ? (
+              {originalIndex < visiblePreviewCount ? (
                 <img
                   src={wmsImage}
                   alt={layer.title}
@@ -501,6 +573,7 @@ const AutoWMS = ({
         </Stack>
         {autowmsExplorerList}
         {autowmsWMSServiceHeader}
+        {layerFilterBox}
         {autowmsWMSService}
         {isLoading && <LinearProgress />}
       </Paper>

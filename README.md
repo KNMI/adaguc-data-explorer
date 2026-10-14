@@ -1,57 +1,31 @@
-# adaguc-data-explorer
+# Adaguc Data Explorer (ADE)
 
-Note: / TODO:
+Browser-based viewer for WMS/WCS geospatial data, built for use with [Adaguc-Server](https://github.com/KNMI/adaguc-server) WMS services. For developers integrating or testing services, researchers visualizing datasets, and anyone building new WMS layers who needs a quick way to check rendering, styles, dimensions and legends.
 
-Currently pinning versions to 9.8.0:
+## Quick start
 
-```
-
-    "@opengeoweb/theme": "9.8.0",
-    "@opengeoweb/webmap-react": "9.8.0",
-    "@opengeoweb/webmap": "9.8.0",
-```
-
-## Install dependencies:
-
-```
-nvm use 20
+```bash
+nvm use 22
 npm ci
+npm start   # http://localhost:4000
 ```
 
-## To run the storybook:
+## Scripts
 
-In this case the files in folder `stories` are used.
-
-`npm run storybook`
-
-It should automatically show in your browser.
-
-## To run the application:
-
-In this case the files in the folder `src/application` are used.
-
-`npm run start`
-
-and then visit the url http://localhost:4000/ in your browser.
-
-## To build a application
-
-A compiled version using only a javascript and a index.html file can be made with:
-
-`npm run build`
-
-The application is in that case written to the `dist` folder. You run the application in the dist folder via
-
-`npx serve dist`
-
-and then visit the url http://localhost:3000/ in your browser.
-
+| Command                | Purpose                                             |
+| ----------------------- | ---------------------------------------------------- |
+| `npm start`             | Dev server with hot reload                            |
+| `npm run build`         | Production build → `dist/` (serve with `npx serve dist`) |
+| `npm test`              | Run the test suite                                    |
+| `npm run lint`          | Prettier + ESLint                                     |
+| `npm run storybook`     | Component storybook (uses `stories/`)                 |
 
 ## Docker
 
-```
+```bash
 docker build . -t adaguc-data-explorer
-docker run -it -e ADAGUC_AUTOWMS_ENDPOINT=https://geoservices.knmi.nl/autowms -p 8080:80 adaguc-data-explorer
-# Vist http://localhost:8080/
-
+docker run -it -p 8080:80 \
+  -e ADAGUC_AUTOWMS_ENDPOINT=https://geoservices.knmi.nl/autowms \
+  adaguc-data-explorer
+# → http://localhost:8080
 ```

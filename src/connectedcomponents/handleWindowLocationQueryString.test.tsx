@@ -1,5 +1,9 @@
 import { actions } from '../store/store';
-import { handleWindowLocationQueryString } from './handleWindowLocationQueryString';
+import { AdagucMap } from '../store/types';
+import {
+  handleWindowLocationQueryString,
+  makePermaLink,
+} from './handleWindowLocationQueryString';
 
 jest.mock('@opengeoweb/webmap', () => ({
   getWMLayerById: jest.fn(),
@@ -61,6 +65,40 @@ describe('handleWindowLocationQueryString', () => {
 
     expect(dispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: 'wmsservices/requestSetProjection' }),
+    );
+  });
+});
+
+describe('makePermaLink', () => {
+  afterEach(() => {
+    window.history.pushState({}, '', 'http://localhost/');
+  });
+
+  it('includes the path the app is served under, not just the origin', () => {
+    // Regression guard: this app is also deployed as a GitHub Pages
+    // *project* site (e.g. https://knmi.github.io/adaguc-data-explorer/) -
+    // using window.location.origin alone dropped that path, producing a
+    // permalink that pointed at the bare domain root instead.
+    window.history.pushState(
+      {},
+      '',
+      'http://localhost/adaguc-data-explorer/?autowms=https://example.com/autowms',
+    );
+    const map: AdagucMap = {
+      isAnimating: false,
+      isGetFeatureInfoActive: false,
+      isHistogramBoxSelectActive: false,
+      layers: [],
+      view: {
+        srs: 'EPSG:3857',
+        bbox: { left: -1, bottom: -2, right: 3, top: 4 },
+      },
+    };
+
+    const link = makePermaLink('map1', map);
+
+    expect(link.startsWith('http://localhost/adaguc-data-explorer/?')).toBe(
+      true,
     );
   });
 });

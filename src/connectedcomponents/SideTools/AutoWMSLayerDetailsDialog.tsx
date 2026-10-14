@@ -32,8 +32,8 @@ const AutoWMSLayerDetailsDialog = ({
         zIndex: 2000,
         background: 'white',
         border: '1px solid rgba(0, 0, 0, 0.3)',
-        maxHeight: '80vh',
-        maxWidth: '80vw',
+        height: '80vh',
+        width: '80vw',
         overflow: 'auto',
       }}
       open={layer !== null}
