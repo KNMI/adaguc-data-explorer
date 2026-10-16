@@ -525,6 +525,114 @@ describe('AutoWMS', () => {
     await waitForLoadingToFinish();
   });
 
+  it('filters the dataset/folder list by name', async () => {
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [
+            { path: 'temperature', name: 'Temperature', leaf: false },
+            { path: 'wind', name: 'Wind Speed', leaf: false },
+          ],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    expect(await screen.findByText('Temperature')).toBeInTheDocument();
+    expect(screen.getByText('Wind Speed')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter datasets'), {
+      target: { value: 'temp' },
+    });
+
+    expect(screen.getByText('Temperature')).toBeInTheDocument();
+    expect(screen.queryByText('Wind Speed')).not.toBeInTheDocument();
+  });
+
+  it('shows a no-match message instead of the dataset/folder list when nothing matches the filter', async () => {
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'temperature', name: 'Temperature', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    expect(await screen.findByText('Temperature')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter datasets'), {
+      target: { value: 'nothing matches this' },
+    });
+
+    expect(screen.queryByText('Temperature')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/No datasets match "nothing matches this"/),
+    ).toBeInTheDocument();
+  });
+
+  it('clears the dataset filter when navigating into a subfolder', async () => {
+    // Regression guard: a filter left over from the previously browsed
+    // folder would otherwise silently hide items of the one just
+    // navigated into.
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=sub')) {
+        return Promise.resolve({
+          result: [{ path: 'sub/inner', name: 'Inner', leaf: false }],
+        });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    expect(await screen.findByText('SubFolder')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter datasets'), {
+      target: { value: 'SubFolder' },
+    });
+    expect(screen.getByLabelText('Filter datasets')).toHaveValue('SubFolder');
+
+    fireEvent.click(screen.getByText('SubFolder'));
+
+    expect(await screen.findByText('Inner')).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter datasets')).toHaveValue('');
+  });
+
   it("shows the selected dataset's own full path, not doubled up with the folder path", async () => {
     // Regression guard: adaguc-server's getfiles endpoint always returns a
     // full path from the root for every item - including leaves - not a
@@ -707,6 +815,76 @@ describe('AutoWMS', () => {
       expect.stringContaining('request=getfiles'),
     );
     expect(input).toHaveValue('');
+  });
+
+  it('remembers a service loaded straight from the ?autowms= url', async () => {
+    // Regression guard: a service set from the page's own url (e.g.
+    // https://.../?autowms=http://localhost:8080, opened directly or from
+    // a bookmark/shared link) is applied straight to state on mount,
+    // bypassing loadAutoWMSService - which is where remembering normally
+    // happens - so it never showed up as a suggestion later.
+    const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
+    const queryServiceUrl = 'http://localhost:8080';
+    window.history.pushState(
+      {},
+      '',
+      `http://localhost/?autowms=${encodeURIComponent(queryServiceUrl)}`,
+    );
+    const mockFetch = makeFetchMock(configJsonHandler);
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    expect(
+      JSON.parse(window.localStorage.getItem(RECENT_SERVICES_KEY) || '[]'),
+    ).toEqual([queryServiceUrl]);
+
+    window.history.pushState({}, '', 'http://localhost/');
+  });
+
+  it('resolves a bare host loaded from the ?autowms= url via the common AutoWMS mount points', async () => {
+    // Regression guard: a bare host (e.g. from a shared/bookmarked link,
+    // or someone who doesn't know the exact mount path) didn't resolve to
+    // anything at all before - this tries it as given, then "/autowms",
+    // then "/adaguc-server/autowms", keeping whichever actually looks
+    // like a real listing, updating the input and the remembered history
+    // to match.
+    const RECENT_SERVICES_KEY = 'adaguc_recent_wms_services';
+    const bareUrl = 'http://localhost:8080';
+    const resolvedUrl = 'http://localhost:8080/adaguc-server/autowms';
+    window.history.pushState(
+      {},
+      '',
+      `http://localhost/?autowms=${encodeURIComponent(bareUrl)}`,
+    );
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url === `${resolvedUrl}?request=getfiles&path=`) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      // The bare host and the plain "/autowms" guess don't look like a
+      // real listing here, so resolution should move past both of them.
+      return Promise.resolve({ notAListing: true });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    expect(await screen.findByText('SubFolder')).toBeInTheDocument();
+    expect(screen.getByLabelText('Add AutoWMS or WMS service')).toHaveValue(
+      resolvedUrl,
+    );
+    expect(
+      JSON.parse(window.localStorage.getItem(RECENT_SERVICES_KEY) || '[]'),
+    ).toEqual([resolvedUrl]);
+
+    window.history.pushState({}, '', 'http://localhost/');
   });
 
   it('pins the deployment default AutoWMS endpoint as the first option, without a delete icon', async () => {

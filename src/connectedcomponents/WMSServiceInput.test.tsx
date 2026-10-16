@@ -98,9 +98,17 @@ describe('WMSServiceInput', () => {
     // suffix (e.g. someone forgot to add it) used to always be added as a
     // WMS layer - it should be tried as AutoWMS first, by guessing the
     // corrected url (with the suffix appended), not the bare one typed.
-    const mockFetch = jest.fn().mockResolvedValue({
-      json: () => Promise.resolve({ result: [] }),
-    });
+    // The bare url itself doesn't look like a real listing (no `result`),
+    // so resolution moves on to the next candidate instead of stopping
+    // there.
+    const mockFetch = jest.fn((url: string) =>
+      Promise.resolve({
+        json: () =>
+          Promise.resolve(
+            url.includes('/autowms?') ? { result: [] } : { notAListing: true },
+          ),
+      }),
+    );
     global.fetch = mockFetch as unknown as typeof fetch;
 
     render(<WMSServiceInput />);
@@ -121,9 +129,14 @@ describe('WMSServiceInput', () => {
   });
 
   it('inserts a slash before the guessed "autowms" suffix when the url has none', async () => {
-    const mockFetch = jest.fn().mockResolvedValue({
-      json: () => Promise.resolve({ result: [] }),
-    });
+    const mockFetch = jest.fn((url: string) =>
+      Promise.resolve({
+        json: () =>
+          Promise.resolve(
+            url.includes('/autowms?') ? { result: [] } : { notAListing: true },
+          ),
+      }),
+    );
     global.fetch = mockFetch as unknown as typeof fetch;
 
     render(<WMSServiceInput />);

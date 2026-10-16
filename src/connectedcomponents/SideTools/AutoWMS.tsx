@@ -42,6 +42,7 @@ import {
   rememberRecentService,
 } from '../../utils/recentServices';
 import { fetchDefaultAutoWMSService } from '../../utils/defaultAutoWMSService';
+import { resolveAutoWMSUrl } from '../../utils/resolveAutoWMSUrl';
 
 const PREVIEW_SIZE_PX = 140;
 
@@ -85,6 +86,7 @@ const AutoWMS = ({
   const [layers, setLayers] = React.useState<LayerProps[]>([]);
   const [wmsAbstract, setWMSAbstract] = React.useState<string>('');
   const [layerFilter, setLayerFilter] = React.useState<string>('');
+  const [datasetFilter, setDatasetFilter] = React.useState<string>('');
   const [detailsLayer, setDetailsLayer] = React.useState<LayerProps | null>(
     null,
   );
@@ -102,19 +104,18 @@ const AutoWMS = ({
   };
 
   // What is currently typed in the text field, updated on every keystroke.
-  const [autoWMSServiceInput, setAutoWMSServiceInput] = React.useState<string>(
-    serviceFromQueryString || '',
-  );
+  // Starts empty rather than straight from the ?autowms=/?wmsservice= url -
+  // that url still gets loaded, but via loadAutoWMSService below (see the
+  // mount effect further down), so it goes through the same AutoWMS url
+  // resolution and remembering as one entered manually.
+  const [autoWMSServiceInput, setAutoWMSServiceInput] =
+    React.useState<string>('');
   // The committed service url that actually drives fetching the AutoWMS
   // explorer listing. Kept in sync with autoWMSServiceInput after a short
   // debounce while typing, or immediately on Enter/Load, so we don't fire a
   // request for every keystroke (and for every half-typed url/port).
-  const [autoWMSService, setAutoWMSService] = React.useState<string>(
-    serviceFromQueryString || '',
-  );
-  const [ogcWMSService, setOGCWMSService] = React.useState<string>(
-    (isWMSService(serviceFromQueryString) && serviceFromQueryString) || '',
-  );
+  const [autoWMSService, setAutoWMSService] = React.useState<string>('');
+  const [ogcWMSService, setOGCWMSService] = React.useState<string>('');
 
   const handleError = (errorMessage: string): void => {
     // eslint-disable-next-line no-console
@@ -204,14 +205,34 @@ const AutoWMS = ({
     changeLeaf('');
     setOGCWMSService('');
     setAutoWMSServiceInput(service);
-    setAutoWMSService(service);
 
+    if (!service) {
+      setAutoWMSService(service);
+      return;
+    }
     if (isWMSService(service)) {
+      setAutoWMSService(service);
       setOGCWMSService(service);
-    }
-    if (service) {
       setRecentServices(rememberRecentService(service));
+      return;
     }
+
+    // Often just the bare host (e.g. a shared/bookmarked link, or someone
+    // who doesn't know the exact mount path) - try it as given, then the
+    // common AutoWMS mount points, before falling back to it verbatim so
+    // the explorer still shows a clear "No items found" instead of
+    // silently resolving to nothing.
+    setLoading(true);
+    resolveAutoWMSUrl(service)
+      .then((resolved) => {
+        const finalService = resolved ?? service;
+        setAutoWMSServiceInput(finalService);
+        setAutoWMSService(finalService);
+        setRecentServices(rememberRecentService(finalService));
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   const fetchNewAutoWMS = (): void => {
@@ -248,6 +269,9 @@ const AutoWMS = ({
 
   React.useEffect(() => {
     fetchAutoWMSList();
+    // A filter left over from the previously browsed folder/service would
+    // otherwise silently hide items of the one just navigated into.
+    setDatasetFilter('');
   }, [path, autoWMSService]);
 
   React.useEffect(() => {
@@ -283,21 +307,83 @@ const AutoWMS = ({
     return () => window.clearInterval(intervalId);
   }, [layers]);
 
+  // Loads whichever service the page should start with: one given via the
+  // ?autowms=/?wmsservice= url, or - failing that - this deployment's own
+  // configured default. Routing both through loadAutoWMSService (rather
+  // than setting state directly) gives a url loaded this way the same
+  // AutoWMS endpoint resolution and recent-services remembering as one
+  // entered manually - without it, a bookmarked/shared link pointing at
+  // just the bare host never resolved to anything, and was never
+  // remembered as a suggestion for next time either.
   React.useEffect(() => {
+    if (serviceFromQueryString) {
+      loadAutoWMSService(serviceFromQueryString);
+    }
+    // The deployment default is always fetched (it also pins an option in
+    // the suggestion list below, regardless of what's actually loaded),
+    // but only used to load something here when the url didn't already
+    // say otherwise.
     // eslint-disable-next-line no-void
     void fetchDefaultAutoWMSService().then((defaultService) => {
       if (!defaultService) {
         return;
       }
       setDefaultAutoWMSService(defaultService);
-      const service =
-        serviceFromQueryString?.length > 0
-          ? serviceFromQueryString
-          : defaultService;
-      setAutoWMSServiceInput(service);
-      setAutoWMSService(service);
+      if (!serviceFromQueryString) {
+        loadAutoWMSService(defaultService);
+      }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Matches the layer filter below: split into words and require each one
+  // to appear somewhere in the item's name, rather than the whole query
+  // matching as one literal substring.
+  const datasetFilterTokens = datasetFilter
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  const filteredResultItems = (result?.result ?? []).filter((p) => {
+    if (datasetFilterTokens.length === 0) {
+      return true;
+    }
+    const searchableText = p.name.toLowerCase();
+    return datasetFilterTokens.every((token) => searchableText.includes(token));
+  });
+
+  const datasetFilterBox = currentLeaf.length === 0 &&
+    layers?.length === 0 &&
+    result?.result?.length > 0 && (
+      <Box sx={{ px: 1.5, pt: 1.5 }}>
+        <TextField
+          fullWidth
+          size="small"
+          label="Filter datasets"
+          placeholder="e.g. temperature"
+          variant="outlined"
+          value={datasetFilter}
+          onChange={(e) => {
+            setDatasetFilter(e.target.value);
+          }}
+          InputProps={{
+            endAdornment: datasetFilter.length > 0 && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="Clear dataset filter"
+                  onClick={() => {
+                    setDatasetFilter('');
+                  }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
+    );
 
   const autowmsExplorerList = currentLeaf.length === 0 &&
     layers?.length === 0 && (
@@ -311,7 +397,16 @@ const AutoWMS = ({
             No items found.
           </Typography>
         )}
-        {result?.result?.map((p) => (
+        {result?.result?.length > 0 && filteredResultItems.length === 0 && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ px: 2, py: 1.5 }}
+          >
+            No datasets match &quot;{datasetFilter}&quot;.
+          </Typography>
+        )}
+        {filteredResultItems.map((p) => (
           <ListItemButton
             key={p.path + p.name}
             onClick={() => {
@@ -682,6 +777,7 @@ const AutoWMS = ({
             </Tooltip>
           </Stack>
         </Stack>
+        {datasetFilterBox}
         {autowmsExplorerList}
         {autowmsWMSServiceHeader}
         {layerFilterBox}

@@ -5,13 +5,13 @@ import type { SxProps, Theme } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { actions, useAppDispatch } from '../store/store';
 import { thunks } from '../store/thunks';
-import { makeGoodServiceLink } from '../utils/makeGoodServiceLink';
 import {
   forgetRecentService,
   getRecentServices,
   rememberRecentService,
 } from '../utils/recentServices';
 import { fetchDefaultAutoWMSService } from '../utils/defaultAutoWMSService';
+import { resolveAutoWMSUrl } from '../utils/resolveAutoWMSUrl';
 
 // AutoWMS explorer endpoints (see AutoWMS.tsx) are plain file-listing
 // services, not OGC WMS ones - a url naming "autowms" always opens the
@@ -19,26 +19,6 @@ import { fetchDefaultAutoWMSService } from '../utils/defaultAutoWMSService';
 const isAutoWMSServiceUrl = (url: string): boolean => /autowms/i.test(url);
 const isOGCWMSServiceUrl = (url: string): boolean =>
   url.toLocaleLowerCase().includes('service=wms');
-
-// A common slip is typing the AutoWMS server's url without the "autowms"
-// path segment it actually serves from (e.g. "https://host/" instead of
-// "https://host/autowms") - guess that corrected url rather than probing
-// the one actually typed.
-const guessAutoWMSUrl = (url: string): string =>
-  `${url.endsWith('/') ? url : `${url}/`}autowms`;
-
-// Neither a service=wms url nor one already naming "autowms" - rather
-// than assume, try the likely AutoWMS url (see guessAutoWMSUrl) once, and
-// only fall back to adding the originally typed url as a WMS layer if
-// that doesn't look like valid AutoWMS explorer data.
-const probeAutoWMSUrl = (url: string): Promise<string | undefined> => {
-  const candidate = guessAutoWMSUrl(url);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-  return fetch(`${makeGoodServiceLink(candidate)}request=getfiles&path=`)
-    .then((response) => response.json() as Promise<{ result?: unknown[] }>)
-    .then((json) => (Array.isArray(json?.result) ? candidate : undefined))
-    .catch(() => undefined);
-};
 
 export interface WMSServiceInputProps {
   // eslint-disable-next-line react/require-default-props
@@ -95,8 +75,12 @@ const WMSServiceInput = ({
     if (!service) {
       return;
     }
-    const finish = (): void => {
-      setRecentServices(rememberRecentService(service));
+    // Remembers whatever url actually ended up working - the resolved
+    // AutoWMS url (e.g. with "/autowms" appended), not necessarily the
+    // bare one typed, so the remembered entry is one that'll work again
+    // next time without needing to be re-resolved.
+    const finish = (resolvedService: string = service): void => {
+      setRecentServices(rememberRecentService(resolvedService));
       setValue('');
       onHandled?.();
     };
@@ -104,7 +88,7 @@ const WMSServiceInput = ({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       dispatch(thunks.addLayer({ mapId, serviceUrl: service, name: undefined }))
         .unwrap()
-        .then(finish);
+        .then(() => finish());
 
     if (isAutoWMSServiceUrl(service)) {
       dispatch(actions.requestAutoWMSService({ service }));
@@ -119,11 +103,15 @@ const WMSServiceInput = ({
       return;
     }
 
-    probeAutoWMSUrl(service)
+    // Neither a service=wms url nor one already naming "autowms" - rather
+    // than assume, try the likely AutoWMS urls (see resolveAutoWMSUrl)
+    // first, and only fall back to adding the originally typed url as a
+    // WMS layer if none of those look like valid AutoWMS explorer data.
+    resolveAutoWMSUrl(service)
       .then((autoWMSUrl) => {
         if (autoWMSUrl) {
           dispatch(actions.requestAutoWMSService({ service: autoWMSUrl }));
-          finish();
+          finish(autoWMSUrl);
           return undefined;
         }
         return addAsLayer();

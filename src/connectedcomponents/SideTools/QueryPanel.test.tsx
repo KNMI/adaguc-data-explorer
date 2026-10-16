@@ -79,12 +79,21 @@ jest.mock('recharts', () => {
         children,
       ),
     Bar: () => null,
-    Line: () => null,
+    Line: ({ dataKey, strokeOpacity }: any) =>
+      ReactLib.createElement('div', {
+        'data-testid': `line-${String(dataKey)}`,
+        'data-stroke-opacity': strokeOpacity,
+      }),
     XAxis: () => null,
     YAxis: () => null,
     CartesianGrid: () => null,
     Tooltip: () => null,
-    Legend: () => null,
+    // QueryPanel passes its own SeriesLegend element (a real component,
+    // not part of recharts) as `content` - rendering it as-is here, like
+    // recharts' own `isValidElement(content)` branch does, lets these
+    // tests interact with the real legend buttons it produces.
+    Legend: ({ content }: any) =>
+      ReactLib.isValidElement(content) ? content : null,
   };
   /* eslint-enable
      global-require,
@@ -141,6 +150,19 @@ const fakeTimeSeriesResponse = [
   },
 ];
 
+const fakeMultiSeriesTimeSeriesResponse = [
+  {
+    standard_name: 'air_pressure_at_mean_sea_level',
+    units: 'hPa',
+    dims: ['member', 'time'],
+    data: {
+      '1': { '2025-01-01T00:00:00Z': '1000.000000' },
+      '2': { '2025-01-01T00:00:00Z': '1002.000000' },
+      '3': { '2025-01-01T00:00:00Z': '1004.000000' },
+    },
+  },
+];
+
 const fakeHistogramResponse = {
   air_pressure_msl: {
     numdatasources: 1,
@@ -192,6 +214,12 @@ describe('QueryPanel', () => {
     fakeState = buildState();
     mockUseAppSelector.mockImplementation((selector) => selector(fakeState));
 
+    // jest.clearAllMocks() (below) only clears recorded calls, not a
+    // previously configured mockReturnValue - without resetting this here
+    // too, a custom getWMLayerById return value set by one test could
+    // otherwise leak into a later one that never sets its own.
+    mockGetWMLayerById.mockReturnValue(undefined);
+
     mockGetFeatureInfoUrl.mockReturnValue(
       'http://localhost:8080/adagucserver?mock=getfeatureinfo',
     );
@@ -214,10 +242,20 @@ describe('QueryPanel', () => {
   it('fetches and renders GetFeatureInfo results for the clicked point by default', async () => {
     // GetFeatureInfo and TimeSeries both react to the same map-click pin,
     // so both fetch effects run here regardless of which subtab is shown -
-    // the response needs both shapes to avoid an unrelated console.error.
-    global.fetch = jest.fn().mockResolvedValue({
-      text: () => Promise.resolve('<b>result</b>'),
-      json: () => Promise.resolve(fakeTimeSeriesResponse),
+    // the response needs to match each effect's own request url, since
+    // TimeSeries now reads the body via .text() too (to recognise a
+    // non-JSON OGC exception on failure) rather than only ever .json().
+    global.fetch = jest.fn((url: string) => {
+      if (url.includes('mock=timeseries')) {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(JSON.stringify(fakeTimeSeriesResponse)),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve('<b>result</b>'),
+      });
     }) as unknown as typeof fetch;
     fakeState = buildState({ mapPinLocation: fakeMapPinLocation });
 
@@ -235,9 +273,17 @@ describe('QueryPanel', () => {
   });
 
   it('snaps a clicked time series point to the dimension and jumps the layer to it', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      json: () => Promise.resolve(fakeTimeSeriesResponse),
-      text: () => Promise.resolve('<b>result</b>'),
+    global.fetch = jest.fn((url: string) => {
+      if (url.includes('mock=timeseries')) {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(JSON.stringify(fakeTimeSeriesResponse)),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve('<b>result</b>'),
+      });
     }) as unknown as typeof fetch;
     fakeState = buildState({ mapPinLocation: fakeMapPinLocation });
 
@@ -275,9 +321,327 @@ describe('QueryPanel', () => {
     });
   });
 
+  it('shows the server own error message when a timeseries request fails', async () => {
+    // Regression guard: a failed request (e.g. past the server's own
+    // maxquerylimit) responds with a non-2xx status and an OGC
+    // <ServiceExceptionReport> XML body, even when JSON was requested -
+    // this used to be swallowed into a generic "Failed to load timeseries"
+    // with the real reason only ever logged to the console.
+    const serviceExceptionXml = `<?xml version='1.0' encoding="ISO-8859-1" standalone="no" ?>
+<ServiceExceptionReport version="1.3.0">
+  <ServiceException code="UnprocessableEntity">
+    Requested data exceeded maxquerylimit=512;
+  </ServiceException>
+</ServiceExceptionReport>`;
+    global.fetch = jest.fn((url: string) => {
+      if (url.includes('mock=timeseries')) {
+        return Promise.resolve({
+          ok: false,
+          text: () => Promise.resolve(serviceExceptionXml),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve('<b>result</b>'),
+      });
+    }) as unknown as typeof fetch;
+    fakeState = buildState({ mapPinLocation: fakeMapPinLocation });
+
+    render(<QueryPanel mapId={mapId} isActive />);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'TimeSeries' }));
+    });
+
+    expect(
+      await screen.findByText(
+        /Failed to load timeseries: Requested data exceeded maxquerylimit=512/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('retries a failed timeseries request with every dimension scaled down when the server reports a maxquerylimit', async () => {
+    // Regression guard: a request for the full time range can ask for
+    // more cells than the server allows (time steps times every
+    // wildcarded series dimension) - rather than leaving that as a dead
+    // end, or only ever shrinking time, one retry scales every variable
+    // dimension (time and member here) down together to fit the reported
+    // limit.
+    const serviceExceptionXml = `<?xml version='1.0' encoding="ISO-8859-1" standalone="no" ?>
+<ServiceExceptionReport version="1.3.0">
+  <ServiceException code="UnprocessableEntity">
+    Requested data exceeded maxquerylimit=512;
+  </ServiceException>
+</ServiceExceptionReport>`;
+    const timeDimension = { name: 'time', size: () => 1000 };
+    mockGetWMLayerById.mockReturnValue({
+      getDimension: (name: string) =>
+        name === 'time' ? timeDimension : undefined,
+      getDimensions: () => [timeDimension, { name: 'member', size: () => 10 }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    mockGetTimeSeriesUrl.mockImplementation(
+      (_layer, _location, dimensionLimits) =>
+        dimensionLimits
+          ? 'http://localhost:8080/adagucserver?mock=timeseries-retry'
+          : 'http://localhost:8080/adagucserver?mock=timeseries',
+    );
+    global.fetch = jest.fn((url: string) => {
+      if (url.includes('mock=timeseries-retry')) {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(JSON.stringify(fakeTimeSeriesResponse)),
+        });
+      }
+      if (url.includes('mock=timeseries')) {
+        return Promise.resolve({
+          ok: false,
+          text: () => Promise.resolve(serviceExceptionXml),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve('<b>result</b>'),
+      });
+    }) as unknown as typeof fetch;
+    fakeState = buildState({ mapPinLocation: fakeMapPinLocation });
+
+    render(<QueryPanel mapId={mapId} isActive />);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'TimeSeries' }));
+    });
+
+    // 1000 time steps * 10 members would ask for 10000 cells against a
+    // limit of 512 - scale = sqrt(512/10000) ~= 0.2263, so the retry
+    // should ask for floor(1000*scale)=226 time steps and
+    // floor(10*scale)=2 members (226*2=452 <= 512).
+    await waitFor(() => {
+      expect(mockGetTimeSeriesUrl).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        { time: 226, member: 2 },
+      );
+    });
+    expect(await screen.findByTestId('timeseries-chart')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Failed to load timeseries/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('dims every series but the one hovered in the legend', async () => {
+    global.fetch = jest.fn((url: string) => {
+      if (url.includes('mock=timeseries')) {
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(JSON.stringify(fakeMultiSeriesTimeSeriesResponse)),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve('<b>result</b>'),
+      });
+    }) as unknown as typeof fetch;
+    fakeState = buildState({ mapPinLocation: fakeMapPinLocation });
+
+    render(<QueryPanel mapId={mapId} isActive />);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'TimeSeries' }));
+    });
+
+    await screen.findByTestId('line-1');
+    const legendItem1 = screen.getByRole('button', { name: 'member 1' });
+    const legendItem2 = screen.getByRole('button', { name: 'member 2' });
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+
+    fireEvent.mouseEnter(legendItem1);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '0.15',
+    );
+    // The hovered entry's own legend text is highlighted (bold, full
+    // opacity) the same way, while the other entry is dimmed.
+    expect(legendItem1).toHaveStyle({ fontWeight: '700', opacity: '1' });
+    expect(legendItem2).toHaveStyle({ fontWeight: '400', opacity: '0.4' });
+
+    fireEvent.mouseLeave(legendItem1);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(legendItem1).toHaveStyle({ fontWeight: '400', opacity: '1' });
+    expect(legendItem2).toHaveStyle({ fontWeight: '400', opacity: '1' });
+  });
+
+  it('pins a series when its legend entry is clicked, staying dimmed after the mouse leaves', async () => {
+    global.fetch = jest.fn((url: string) => {
+      if (url.includes('mock=timeseries')) {
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(JSON.stringify(fakeMultiSeriesTimeSeriesResponse)),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve('<b>result</b>'),
+      });
+    }) as unknown as typeof fetch;
+    fakeState = buildState({ mapPinLocation: fakeMapPinLocation });
+
+    render(<QueryPanel mapId={mapId} isActive />);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'TimeSeries' }));
+    });
+    await screen.findByTestId('line-1');
+    const legendItem1 = screen.getByRole('button', { name: 'member 1' });
+    const legendItem2 = screen.getByRole('button', { name: 'member 2' });
+
+    fireEvent.click(legendItem2);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '0.15',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(legendItem2).toHaveStyle({ fontWeight: '700', opacity: '1' });
+
+    // The pin survives hovering a different series and moving away again.
+    fireEvent.mouseEnter(legendItem1);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    fireEvent.mouseLeave(legendItem1);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '0.15',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+
+    // Clicking the already-pinned entry again un-pins it.
+    fireEvent.click(legendItem2);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+  });
+
+  it('pins more than one legend entry at once, showing all of them', async () => {
+    global.fetch = jest.fn((url: string) => {
+      if (url.includes('mock=timeseries')) {
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(JSON.stringify(fakeMultiSeriesTimeSeriesResponse)),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve('<b>result</b>'),
+      });
+    }) as unknown as typeof fetch;
+    fakeState = buildState({ mapPinLocation: fakeMapPinLocation });
+
+    render(<QueryPanel mapId={mapId} isActive />);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'TimeSeries' }));
+    });
+    await screen.findByTestId('line-1');
+    const legendItem1 = screen.getByRole('button', { name: 'member 1' });
+    const legendItem2 = screen.getByRole('button', { name: 'member 2' });
+    const legendItem3 = screen.getByRole('button', { name: 'member 3' });
+
+    // Pinning a second entry adds to the pinned set rather than replacing
+    // the first one.
+    fireEvent.click(legendItem1);
+    fireEvent.click(legendItem2);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(screen.getByTestId('line-3')).toHaveAttribute(
+      'data-stroke-opacity',
+      '0.15',
+    );
+    expect(legendItem1).toHaveStyle({ fontWeight: '700', opacity: '1' });
+    expect(legendItem2).toHaveStyle({ fontWeight: '700', opacity: '1' });
+    expect(legendItem3).toHaveStyle({ fontWeight: '400', opacity: '0.4' });
+
+    // Un-pinning just one leaves the other(s) pinned.
+    fireEvent.click(legendItem1);
+    expect(screen.getByTestId('line-1')).toHaveAttribute(
+      'data-stroke-opacity',
+      '0.15',
+    );
+    expect(screen.getByTestId('line-2')).toHaveAttribute(
+      'data-stroke-opacity',
+      '1',
+    );
+    expect(screen.getByTestId('line-3')).toHaveAttribute(
+      'data-stroke-opacity',
+      '0.15',
+    );
+  });
+
+  it('shows the server own error message when a histogram request fails', async () => {
+    const serviceExceptionXml = `<?xml version='1.0' encoding="ISO-8859-1" standalone="no" ?>
+<ServiceExceptionReport version="1.3.0">
+  <ServiceException code="UnprocessableEntity">
+    Requested data exceeded maxquerylimit=512;
+  </ServiceException>
+</ServiceExceptionReport>`;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      text: () => Promise.resolve(serviceExceptionXml),
+    }) as unknown as typeof fetch;
+
+    const { rerender } = render(<QueryPanel mapId={mapId} isActive />);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Histogram' }));
+    });
+
+    fakeState = buildState({ histogramBox: fakeHistogramBox });
+    rerender(<QueryPanel mapId={mapId} isActive />);
+
+    expect(
+      await screen.findByText(
+        /Failed to load histogram: Requested data exceeded maxquerylimit=512/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('toggles histogram box-select and renders bins once a box is dragged', async () => {
     global.fetch = jest.fn().mockResolvedValue({
-      json: () => Promise.resolve(fakeHistogramResponse),
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify(fakeHistogramResponse)),
     }) as unknown as typeof fetch;
 
     const { rerender } = render(<QueryPanel mapId={mapId} isActive />);
