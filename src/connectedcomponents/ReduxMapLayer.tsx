@@ -20,6 +20,12 @@ const DEFAULT_TIME_CONTEXT: TimeContextType = {
   prefetchList: [],
 };
 
+// webmap-react requests WMS imagery extentRatio^2 % larger than the
+// current view extent (default 1.2) so panning has a margin of already-
+// fetched image to show before the next GetMap request lands. Set to 1.0
+// (request exactly the current view extent, no margin) instead.
+const WMS_EXTENT_RATIO = 1.0;
+
 export interface ReduxMapLayerProps {
   layer: AdagucLayer;
   mapId: string;
@@ -48,6 +54,7 @@ const getLayerProps = (
   name: layer.name,
   dimensions: layer.dimensions,
   zIndex,
+  extentRatio: WMS_EXTENT_RATIO,
 });
 
 interface InnerLayerProps {

@@ -22,12 +22,17 @@ jest.mock('@opengeoweb/webmap-react', () => {
   const MockTimeContext = ReactLib.createContext({});
   return {
     // Reads the context value back out and exposes it, so a test can
-    // verify what AnimatedMapLayer actually provides through it.
-    OpenLayersLayer: () => {
+    // verify what AnimatedMapLayer actually provides through it. Also
+    // exposes the extentRatio it was given, so a test can verify what
+    // getLayerProps actually passed through.
+    OpenLayersLayer: (props: { extentRatio?: number }) => {
       const timeContextValue = ReactLib.useContext(MockTimeContext);
       return ReactLib.createElement(
         'div',
-        { 'data-testid': 'time-context-value' },
+        {
+          'data-testid': 'time-context-value',
+          'data-extent-ratio': props.extentRatio,
+        },
         JSON.stringify(timeContextValue),
       );
     },
@@ -198,5 +203,25 @@ describe('ReduxMapLayer animation sync', () => {
     expect(
       JSON.parse(getByTestId('time-context-value').textContent || ''),
     ).toEqual({ isAnimating: true, prefetchList: [1, 2, 3] });
+  });
+
+  it('requests WMS imagery at exactly the view extent (extentRatio 1), not padded', () => {
+    // webmap-react defaults to fetching imagery 1.2x the view extent for a
+    // panning margin - this app opts out of that margin instead. Each
+    // render's own container is queried directly (rather than the shared
+    // document body via getByTestId) since both stay mounted at once.
+    const { container: staticContainer, unmount } = renderLayer(false, null);
+    expect(
+      staticContainer.querySelector('[data-testid="time-context-value"]'),
+    ).toHaveAttribute('data-extent-ratio', '1');
+    unmount();
+
+    const { container: animatedContainer } = renderLayer(
+      true,
+      tickAt('2025-01-01T00:00:00Z'),
+    );
+    expect(
+      animatedContainer.querySelector('[data-testid="time-context-value"]'),
+    ).toHaveAttribute('data-extent-ratio', '1');
   });
 });
