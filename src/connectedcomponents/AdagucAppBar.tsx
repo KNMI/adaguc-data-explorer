@@ -45,6 +45,14 @@ const AdagucAppBar = (): React.ReactElement => {
             it). Repeating the override at "sm" too makes sure it wins at
             every size. */}
         <Toolbar sx={{ minHeight: { xs: '78px', sm: '78px' } }}>
+          <WMSServiceInput
+            sx={{
+              flexGrow: 1,
+              mr: 2,
+              backgroundColor: 'background.paper',
+              borderRadius: 1,
+            }}
+          />
           <Tooltip title="Predefined areas">
             <IconButton
               size="large"
@@ -69,14 +77,6 @@ const AdagucAppBar = (): React.ReactElement => {
           >
             <MenuIcon sx={{ fontSize: 28 }} />
           </IconButton>
-          <WMSServiceInput
-            sx={{
-              flexGrow: 1,
-              mr: 2,
-              backgroundColor: 'background.paper',
-              borderRadius: 1,
-            }}
-          />
           <IconButton
             size="large"
             color="inherit"
