@@ -755,6 +755,85 @@ describe('AutoWMS', () => {
     );
   });
 
+  it('keeps showing the explorer list after re-loading the already-loaded service', async () => {
+    // Regression guard: loadAutoWMSService always synchronously resets
+    // result/layers to empty before (re-)fetching - but the effect that
+    // actually performs that fetch only re-runs when path/autoWMSService
+    // actually change value. Re-submitting the exact same already-loaded
+    // url (e.g. pressing Enter/Load again) resolves back to that same
+    // value, so React used to bail out of re-running the effect entirely,
+    // leaving the explorer stuck on "No items found" even though the
+    // service loaded fine moments earlier.
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    expect(await screen.findByText('SubFolder')).toBeInTheDocument();
+
+    // Load the exact same url again, e.g. re-pressing Enter/Load, or
+    // re-clicking the same link in the top bar.
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+    await waitForLoadingToFinish();
+
+    expect(await screen.findByText('SubFolder')).toBeInTheDocument();
+    expect(screen.queryByText('No items found.')).not.toBeInTheDocument();
+  });
+
+  it('shows the explorer list when an externally requested service matches the deployment default that already auto-loaded', async () => {
+    // Regression guard: this is the exact scenario reported against the
+    // live deployment - its own config.json default AutoWMS service is
+    // https://geoservices.knmi.nl/autowms?, so a first-time visitor who
+    // also pastes/clicks that same url in the top bar hits the race
+    // above for real: the mount-time default auto-load and the top bar's
+    // externally requested load both resolve to the identical url.
+    const DEFAULT_URL = AUTOWMS_URL;
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({ autowmsurl: DEFAULT_URL });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    const { rerender } = render(
+      <AutoWMS addLayer={jest.fn()} externalServiceRequest={undefined} />,
+    );
+    // Let the deployment default finish auto-loading first.
+    expect(await screen.findByText('SubFolder')).toBeInTheDocument();
+
+    // The user then submits that exact same url from the top bar.
+    rerender(
+      <AutoWMS
+        addLayer={jest.fn()}
+        externalServiceRequest={{ service: DEFAULT_URL, requestId: 1 }}
+      />,
+    );
+    await waitForLoadingToFinish();
+
+    expect(await screen.findByText('SubFolder')).toBeInTheDocument();
+    expect(screen.queryByText('No items found.')).not.toBeInTheDocument();
+  });
+
   it('remembers a loaded service in localStorage and shows it as a suggestion', async () => {
     // Same "recent services" history as WMSServiceInput (top bar/"Add
     // data" dialog) - a url loaded here should be just as easy to get back
