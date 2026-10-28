@@ -16,11 +16,49 @@ jest.mock('@opengeoweb/webmap', () => ({
   getWMLayerById: jest.fn(),
 }));
 
-jest.mock('@opengeoweb/webmap-react', () => ({
-  openLayersGetMapImageStore: {
-    loadDuration: { getLoadDurationForId: jest.fn(() => undefined) },
-  },
-}));
+// A minimal working stand-in for WMImageStore's own event registry (see
+// addImageEventCallback/removeEventCallback), so tests can fire a load
+// event the same way a real completed GetMap request would, rather than
+// just asserting against a jest.fn() mock.
+jest.mock('@opengeoweb/webmap-react', () => {
+  const callbacks: { id: string; callback: (...args: unknown[]) => void }[] =
+    [];
+  return {
+    openLayersGetMapImageStore: {
+      loadDuration: { getLoadDurationForId: jest.fn(() => undefined) },
+      imagesbysrc: new Map(),
+      addImageEventCallback: jest.fn((callback, id) => {
+        callbacks.push({ id, callback });
+      }),
+      removeEventCallback: jest.fn((id) => {
+        const index = callbacks.findIndex((entry) => entry.id === id);
+        if (index !== -1) {
+          callbacks.splice(index, 1);
+        }
+      }),
+      testOnlyFireImageEvent: (image: unknown) => {
+        callbacks.forEach((entry) => entry.callback(image));
+      },
+    },
+  };
+});
+
+// Simulates a GetMap image request completing (successfully or not) for
+// whichever layer(s) have an image-store listener registered - see
+// addImageEventCallback above. The real store's own callback type can't
+// be named here (WMImage/WMImageEventType aren't exported from
+// @opengeoweb/webmap), so this is the one place that works around that,
+// rather than scattering `any` through every test that needs it.
+const fireImageEvent = (image: {
+  getSrc: () => string;
+  hasError: () => boolean;
+}): void => {
+  (
+    openLayersGetMapImageStore as unknown as {
+      testOnlyFireImageEvent: (image: unknown) => void;
+    }
+  ).testOnlyFireImageEvent(image);
+};
 
 jest.mock('./WMSLayerSelector', () => ({
   __esModule: true,
@@ -79,6 +117,7 @@ describe('LayerComponent', () => {
     jest.clearAllMocks();
     mockGetWMLayerById.mockReturnValue(undefined);
     mockGetLoadDurationForId.mockReturnValue(undefined);
+    openLayersGetMapImageStore.imagesbysrc.clear();
   });
 
   it('shows the error icon with a tooltip when the layer has an error', () => {
@@ -109,6 +148,108 @@ describe('LayerComponent', () => {
 
   it('does not show the error icon when hasError is undefined', () => {
     render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+    expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
+  });
+
+  it("shows a server-unreachable warning once this layer's GetMap image fails to load, and clears it once a later one succeeds", () => {
+    // Regression guard: layer.hasError only reflects a failure at
+    // add-layer time - this is the separate, later case where the server
+    // goes down mid-session, after the layer was already working. There's
+    // no prop for that, so it's driven by the image store's own
+    // load-completion events - see imageSrcBelongsToLayer.
+    mockGetWMLayerById.mockReturnValue({
+      getmapURL: 'http://localhost:8080/adagucserver?',
+      name: 'air_pressure_msl',
+      dimensions: [],
+      getDimension: () => undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+    expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
+
+    act(() => {
+      fireImageEvent({
+        getSrc: () =>
+          'http://localhost:8080/adagucserver?SERVICE=WMS&LAYERS=air_pressure_msl',
+        hasError: () => true,
+      });
+    });
+
+    const icon = screen.getByTestId('WarningAmberIcon');
+    expect(icon).toHaveAttribute(
+      'aria-label',
+      "Server unreachable - could not load this layer's image",
+    );
+
+    act(() => {
+      fireImageEvent({
+        getSrc: () =>
+          'http://localhost:8080/adagucserver?SERVICE=WMS&LAYERS=air_pressure_msl',
+        hasError: () => false,
+      });
+    });
+
+    expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
+  });
+
+  it('clears the warning once a later request for a different view (bbox/time) of this layer succeeds, even though an older failed one is still cached', () => {
+    // Regression guard: this used to poll a snapshot of the image store,
+    // picking "the most recently touched" cached entry as the source of
+    // truth - but the store also touches old, no-longer-relevant entries
+    // while looking for an alternative image to show during loading, so
+    // that touch could outrank a genuinely newer successful request and
+    // the warning would never clear. Driving this off the store's own
+    // load-completion events instead means whichever request actually
+    // finished most recently is always what decides the result.
+    mockGetWMLayerById.mockReturnValue({
+      getmapURL: 'http://localhost:8080/adagucserver?',
+      name: 'air_pressure_msl',
+      dimensions: [],
+      getDimension: () => undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    // An older bbox's request is still sitting in the cache, errored, from
+    // when the server was down.
+    openLayersGetMapImageStore.imagesbysrc.set(
+      'http://localhost:8080/adagucserver?SERVICE=WMS&LAYERS=air_pressure_msl&BBOX=old',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { hasError: () => true } as any,
+    );
+    render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+    expect(screen.getByTestId('WarningAmberIcon')).toBeInTheDocument();
+
+    // The server is back up: a request for a new bbox succeeds.
+    act(() => {
+      fireImageEvent({
+        getSrc: () =>
+          'http://localhost:8080/adagucserver?SERVICE=WMS&LAYERS=air_pressure_msl&BBOX=new',
+        hasError: () => false,
+      });
+    });
+
+    expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
+  });
+
+  it("ignores a failed image that belongs to a different layer's service", () => {
+    mockGetWMLayerById.mockReturnValue({
+      getmapURL: 'http://localhost:8080/adagucserver?',
+      name: 'air_pressure_msl',
+      dimensions: [],
+      getDimension: () => undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+    act(() => {
+      fireImageEvent({
+        getSrc: () =>
+          'http://localhost:8080/adagucserver?SERVICE=WMS&LAYERS=some_other_layer',
+        hasError: () => true,
+      });
+    });
 
     expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
   });
@@ -255,16 +396,39 @@ describe('LayerComponent', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows a copy button for the layer title right before it, in the card header', async () => {
+    mockGetWMLayerById.mockReturnValue({
+      title: 'Air pressure at mean sea level',
+      dimensions: [],
+      getDimension: () => undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    render(<LayerComponent {...requiredProps} layer={baseLayer} />);
+
+    expect(
+      screen.getByText('Layer Air pressure at mean sea level'),
+    ).toBeInTheDocument();
+
+    const copyButtons = screen.getAllByRole('button', { name: 'copy' });
+    fireEvent.mouseOver(copyButtons[0]);
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Copy layer title (Air pressure at mean sea level)',
+    );
+  });
+
   it('shows a copy button for the layer name right before the layer dropdown, with a tooltip advertising it', async () => {
     render(<LayerComponent {...requiredProps} layer={baseLayer} />);
 
-    // copyButtons[0] is the GetCapabilities url's, still shown in the
-    // header subtitle; [1] is the layer name's, now sitting right before
-    // the (here mocked-out) layer dropdown instead of down in that
-    // subtitle; [2] is the new style name one, before the style dropdown.
+    // copyButtons[0] is the card header's own layer title copy button;
+    // [1] is the GetCapabilities url's, still shown in the header
+    // subtitle; [2] is the layer name's, now sitting right before the
+    // (here mocked-out) layer dropdown instead of down in that subtitle;
+    // [3] is the new style name one, before the style dropdown.
     const copyButtons = screen.getAllByRole('button', { name: 'copy' });
-    expect(copyButtons).toHaveLength(3);
-    fireEvent.mouseOver(copyButtons[1]);
+    expect(copyButtons).toHaveLength(4);
+    fireEvent.mouseOver(copyButtons[2]);
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Copy layer name (air_pressure_msl)',
@@ -281,8 +445,8 @@ describe('LayerComponent', () => {
     );
 
     const copyButtons = screen.getAllByRole('button', { name: 'copy' });
-    expect(copyButtons).toHaveLength(3);
-    fireEvent.mouseOver(copyButtons[2]);
+    expect(copyButtons).toHaveLength(4);
+    fireEvent.mouseOver(copyButtons[3]);
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Copy style name (style_a) for layer air_pressure_msl',
@@ -313,11 +477,12 @@ describe('LayerComponent', () => {
       />,
     );
 
-    // [0] GetCapabilities url, [1] layer name, [2] style name, [3] the new
-    // dimension value one, right before its (real, unmocked) slider.
+    // [0] layer title (card header), [1] GetCapabilities url, [2] layer
+    // name, [3] style name, [4] the new dimension value one, right before
+    // its (real, unmocked) slider.
     const copyButtons = screen.getAllByRole('button', { name: 'copy' });
-    expect(copyButtons).toHaveLength(4);
-    fireEvent.mouseOver(copyButtons[3]);
+    expect(copyButtons).toHaveLength(5);
+    fireEvent.mouseOver(copyButtons[4]);
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Copy time value (2024-01-01T00:00:00Z) for layer air_pressure_msl',

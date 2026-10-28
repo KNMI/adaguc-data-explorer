@@ -8,6 +8,7 @@ import {
 import {
   Autocomplete,
   Box,
+  Button,
   Chip,
   IconButton,
   InputAdornment,
@@ -31,6 +32,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import InfoIcon from '@mui/icons-material/Info';
 import ClearIcon from '@mui/icons-material/Clear';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import { alpha } from '@mui/material/styles';
 import { CopyToClipBoard } from '../CopyToClipBoard';
 import AutoWMSLayerDetailsDialog from './AutoWMSLayerDetailsDialog';
@@ -64,15 +66,35 @@ interface AutoWMSProps {
   // layer.
   // eslint-disable-next-line react/require-default-props
   externalServiceRequest?: AdagucAutoWMSServiceCommand;
+  // Whether this is the currently selected tab in the side tool panel -
+  // this component stays mounted (just hidden) when another tab is
+  // picked (see SideToolPanel), so the Backspace-to-go-up shortcut below
+  // needs this to know not to fire while e.g. the Query tab is showing.
+  // Defaults to true so standalone/test usage doesn't need to pass it.
+  // eslint-disable-next-line react/require-default-props
+  isActive?: boolean;
 }
 
 const isWMSService = (service: string): boolean => {
   return service?.toLocaleLowerCase().indexOf('service=wms') > 0 || false;
 };
 
+const isTextEntryElement = (element: Element | null): boolean => {
+  if (!element) {
+    return false;
+  }
+  const tagName = element.tagName.toLowerCase();
+  return (
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    (element as HTMLElement).isContentEditable
+  );
+};
+
 const AutoWMS = ({
   addLayer,
   externalServiceRequest,
+  isActive = true,
 }: AutoWMSProps): React.ReactElement => {
   const lowerCaseUrlParams = new URLSearchParams(window.location.search);
 
@@ -117,10 +139,28 @@ const AutoWMS = ({
   const [autoWMSService, setAutoWMSService] = React.useState<string>('');
   const [ogcWMSService, setOGCWMSService] = React.useState<string>('');
 
+  // Set when the most recent fetch (either the AutoWMS folder listing or an
+  // OGC WMS GetCapabilities) failed outright - as opposed to succeeding
+  // with zero results. Shown instead of "No items found.", which otherwise
+  // looks identical whether the service is simply empty or isn't reachable
+  // at all (wrong host/port, service down, ...), leaving no way to tell
+  // the two apart.
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
+
   const handleError = (errorMessage: string): void => {
     // eslint-disable-next-line no-console
     console.error(errorMessage);
   };
+
+  // Turns a fetch-chain rejection into a short, human-readable reason:
+  // a TypeError is what fetch() itself rejects with for a network-level
+  // failure (host unreachable, connection refused, DNS failure, CORS, ...),
+  // while anything else is a message we raised ourselves (e.g. a non-OK
+  // HTTP status) or an unexpected error from a dependency.
+  const describeFetchError = (error: unknown): string =>
+    error instanceof TypeError
+      ? 'the service could not be reached'
+      : (error as Error)?.message || 'an unexpected error occurred';
 
   // Guards against a stale AutoWMS listing response, the same way
   // ogcServiceRequestIdRef (below) guards the OGC WMS one: if this fires
@@ -131,6 +171,7 @@ const AutoWMS = ({
   const autoWMSRequestIdRef = React.useRef(0);
 
   const fetchAutoWMSList = (): void => {
+    setFetchError(null);
     if (isWMSService(autoWMSService)) {
       return;
     }
@@ -146,7 +187,12 @@ const AutoWMS = ({
     setOGCWMSService('');
     setLoading(true);
     fetch(url)
-      .then((a) => a.json())
+      .then((a) => {
+        if (!a.ok) {
+          throw new Error(`server responded with ${a.status} ${a.statusText}`);
+        }
+        return a.json();
+      })
       .then((b) => {
         if (autoWMSRequestIdRef.current !== requestId) {
           return;
@@ -158,6 +204,7 @@ const AutoWMS = ({
           return;
         }
         handleError(e);
+        setFetchError(`Could not reach ${url} - ${describeFetchError(e)}.`);
       })
       .finally(() => {
         if (autoWMSRequestIdRef.current !== requestId) {
@@ -177,6 +224,7 @@ const AutoWMS = ({
   const ogcServiceRequestIdRef = React.useRef(0);
 
   const fetchLayersFromOGCWMSService = (): void => {
+    setFetchError(null);
     ogcServiceRequestIdRef.current += 1;
     const requestId = ogcServiceRequestIdRef.current;
     if (ogcWMSService.length > 0) {
@@ -198,19 +246,13 @@ const AutoWMS = ({
           }
           setLoading(false);
           handleError(f);
+          setFetchError(
+            `Could not reach ${ogcWMSService} - ${describeFetchError(f)}.`,
+          );
         });
     } else {
       setLayers([]);
     }
-  };
-
-  const refresh = (): void => {
-    setLayers([]);
-    setResult({ result: [] });
-    window.setTimeout(() => {
-      fetchAutoWMSList();
-      fetchLayersFromOGCWMSService();
-    }, 100);
   };
 
   // Bumped whenever loadAutoWMSService's non-WMS branch (or refresh, via
@@ -239,6 +281,84 @@ const AutoWMS = ({
   // loadAutoWMSService's WMS branch and by the leaf-dataset click handler
   // below.
   const [wmsFetchGeneration, setWmsFetchGeneration] = React.useState(0);
+
+  // Reloads whichever is actually showing: a selected leaf dataset's (or a
+  // directly-entered WMS url's) layers, or - only otherwise - the folder
+  // listing. Deliberately never calls fetchAutoWMSList while a leaf/WMS
+  // service is active: that function always resets ogcWMSService to '' as
+  // part of navigating to a *different* folder, which here would instead
+  // race fetchLayersFromOGCWMSService's own freshly-started request and
+  // get it discarded by ogcServiceRequestIdRef's stale-response guard -
+  // i.e. clicking refresh while viewing a dataset's layers silently left
+  // the panel empty.
+  const refresh = (): void => {
+    if (isWMSService(autoWMSService) || currentLeaf.length > 0) {
+      setWmsFetchGeneration((generation) => generation + 1);
+      return;
+    }
+    setAutoWMSFetchGeneration((generation) => generation + 1);
+  };
+
+  // Backs out one level: out of a selected leaf dataset's layers, or one
+  // folder segment up the explorer path - shared by the "Up one level"
+  // icon button, its own full-width clone right under the header, and the
+  // Backspace shortcut below, which all do exactly this.
+  const goUpOneLevel = (): void => {
+    if (isWMSService(autoWMSService)) {
+      refresh();
+      return;
+    }
+    setLayers([]);
+    setOGCWMSService('');
+    if (currentLeaf.length > 0) {
+      changeLeaf('');
+    } else {
+      const pathItems = path.split('/');
+      if (pathItems.length > 1) {
+        pathItems.pop();
+        changePath(pathItems.join('/'));
+      } else {
+        changePath('');
+      }
+    }
+  };
+
+  // Kept up to date every render so the keydown listener below (which
+  // only needs to be (re)attached when isActive changes) always calls the
+  // current goUpOneLevel - that closure's own dependencies (path,
+  // currentLeaf, autoWMSService, ...) change far more often than isActive
+  // does.
+  const goUpOneLevelRef = React.useRef(goUpOneLevel);
+  goUpOneLevelRef.current = goUpOneLevel;
+
+  // Backspace, as a shortcut for the "Up one level" button above - but
+  // not while the user is typing somewhere (a filter box, the service
+  // url field, ...), where Backspace should just delete text as normal.
+  // Only attached while this tab is actually the one showing: AutoWMS
+  // stays mounted (just hidden) when another side-panel tab is selected
+  // (see SideToolPanel), and Backspace is also the browser's own
+  // "navigate back" shortcut outside of a text field in some browsers, so
+  // this must not keep intercepting it once the user has moved on to
+  // another tab.
+  React.useEffect(() => {
+    if (!isActive) {
+      return undefined;
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (
+        event.key !== 'Backspace' ||
+        isTextEntryElement(document.activeElement)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      goUpOneLevelRef.current();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isActive]);
 
   // Commits a service immediately, bypassing the debounce below, so the
   // Enter key/Load button (and an externally requested service, see below)
@@ -443,7 +563,18 @@ const AutoWMS = ({
   const autowmsExplorerList = currentLeaf.length === 0 &&
     layers?.length === 0 && (
       <List dense disablePadding>
-        {result?.result?.length === 0 && (
+        {fetchError && !isLoading && (
+          <Stack
+            spacing={1}
+            sx={{ alignItems: 'center', px: 2, py: 3, textAlign: 'center' }}
+          >
+            <CloudOffOutlinedIcon sx={{ fontSize: 40 }} color="disabled" />
+            <Typography variant="body2" color="text.secondary">
+              {fetchError}
+            </Typography>
+          </Stack>
+        )}
+        {!fetchError && result?.result?.length === 0 && (
           <Typography
             variant="body2"
             color="text.secondary"
@@ -804,23 +935,7 @@ const AutoWMS = ({
                 size="small"
                 aria-label="Up one level"
                 onClick={() => {
-                  if (isWMSService(autoWMSService)) {
-                    refresh();
-                    return;
-                  }
-                  setLayers([]);
-                  setOGCWMSService('');
-                  if (currentLeaf.length > 0) {
-                    changeLeaf('');
-                  } else {
-                    const pathItems = path.split('/');
-                    if (pathItems.length > 1) {
-                      pathItems.pop();
-                      changePath(pathItems.join('/'));
-                    } else {
-                      changePath('');
-                    }
-                  }
+                  goUpOneLevel();
                 }}
               >
                 <ArrowUpwardIcon fontSize="small" />
@@ -839,6 +954,22 @@ const AutoWMS = ({
             </Tooltip>
           </Stack>
         </Stack>
+        <Button
+          fullWidth
+          size="small"
+          aria-label="Up one level (full width)"
+          startIcon={<ArrowUpwardIcon fontSize="small" />}
+          onClick={() => {
+            goUpOneLevel();
+          }}
+          sx={{
+            borderRadius: 0,
+            justifyContent: 'center',
+            color: 'text.secondary',
+          }}
+        >
+          Up one level
+        </Button>
         {datasetFilterBox}
         {autowmsExplorerList}
         {autowmsWMSServiceHeader}

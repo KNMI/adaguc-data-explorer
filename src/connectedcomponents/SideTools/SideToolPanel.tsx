@@ -149,6 +149,7 @@ const SideToolPanel = ({
       >
         <div style={{ display: tabPage === 'AUTOWMS' ? 'contents' : 'none' }}>
           <AutoWMS
+            isActive={tabPage === 'AUTOWMS'}
             externalServiceRequest={autoWMSServiceCommand}
             addLayer={(service: string, name: string): void => {
               dispatch(

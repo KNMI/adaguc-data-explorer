@@ -32,6 +32,15 @@ describe('AdagucAboutDialog', () => {
       'https://github.com/KNMI/adaguc-data-explorer',
     );
     expect(link).toHaveAttribute('target', '_blank');
+
+    const serverLink = screen.getByRole('link', {
+      name: /github.com\/KNMI\/adaguc-server/,
+    });
+    expect(serverLink).toHaveAttribute(
+      'href',
+      'https://github.com/KNMI/adaguc-server',
+    );
+    expect(serverLink).toHaveAttribute('target', '_blank');
   });
 
   it('shows the build date, injected by webpack at build time', () => {

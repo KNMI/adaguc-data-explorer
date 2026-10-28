@@ -25,7 +25,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import RefreshIcon from '@mui/icons-material/Refresh';
 // import DetailsIcon from '@mui/icons-material/Info';
-import DuplicateIcon from '@mui/icons-material/FileCopy';
+import DuplicateIcon from '@mui/icons-material/AddToPhotos';
 
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
@@ -36,6 +36,10 @@ import { AdagucLayer } from '../../store/types';
 import { CopyToClipBoard } from '../../connectedcomponents/CopyToClipBoard';
 import { getDatasetNameFromServiceUrl } from '../../utils/getDatasetNameFromServiceUrl';
 import { makeGoodServiceLink } from '../../utils/makeGoodServiceLink';
+import {
+  imageSrcBelongsToLayer,
+  layerHasImageLoadError,
+} from '../../utils/layerHasImageLoadError';
 
 const makeGetCapabilitiesUrl = (serviceUrl: string): string =>
   `${makeGoodServiceLink(serviceUrl)}SERVICE=WMS&REQUEST=GetCapabilities`;
@@ -115,6 +119,49 @@ export const LayerComponent = ({
     };
   }, [layer.id]);
 
+  // Detects the server for this layer going down *after* it was already
+  // added and working (e.g. mid-session, while panning/stepping through
+  // time) - as opposed to layer.hasError, which only reflects a failure
+  // at add-layer time.
+  //
+  // This is driven by the image store's own load-completion events
+  // (addImageEventCallback) rather than polling a snapshot of its cache:
+  // a *polled* check (even one that tries to pick "the most recent"
+  // cached image) can't reliably tell a genuine new request apart from
+  // the store merely re-touching an old, no-longer-relevant cache entry
+  // while looking for an alternative image to show during loading - both
+  // bump the same bookkeeping a poll would have to rely on. The event
+  // callback instead fires once per real completed load, in true
+  // chronological order, for the exact WMImage that just finished - so
+  // whichever request for this layer most recently actually completed is
+  // always what decides the result, and the warning reliably clears the
+  // moment a request succeeds again after the server comes back up.
+  const [hasImageLoadError, setHasImageLoadError] = React.useState(false);
+  React.useEffect(() => {
+    setHasImageLoadError(
+      layerHasImageLoadError(
+        openLayersGetMapImageStore,
+        getWMLayerById(layer.id),
+      ),
+    );
+    const callbackId = `LayerComponent-image-error-${layer.id}`;
+    const handleImageEvent: Parameters<
+      typeof openLayersGetMapImageStore.addImageEventCallback
+    >[0] = (image) => {
+      if (!imageSrcBelongsToLayer(image.getSrc(), getWMLayerById(layer.id))) {
+        return;
+      }
+      setHasImageLoadError(image.hasError());
+    };
+    openLayersGetMapImageStore.addImageEventCallback(
+      handleImageEvent,
+      callbackId,
+    );
+    return () => {
+      openLayersGetMapImageStore.removeEventCallback(callbackId);
+    };
+  }, [layer.id]);
+
   const update = () => {
     updateParent();
     setUpdate((count + 1) % 10);
@@ -135,7 +182,25 @@ export const LayerComponent = ({
       });
   };
   const wmLayer = getWMLayerById(layer?.id);
-  const cardTitle = `Layer ${wmLayer?.title}`;
+  const cardTitle = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+      <CopyToClipBoard
+        info={`layer title (${wmLayer?.title ?? ''})`}
+        text={wmLayer?.title ?? ''}
+      />
+      <Box
+        component="span"
+        sx={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          minWidth: 0,
+        }}
+      >
+        Layer {wmLayer?.title}
+      </Box>
+    </Box>
+  );
   const datasetName = getDatasetNameFromServiceUrl(serviceUrl);
   const getCapabilitiesUrl = makeGetCapabilitiesUrl(serviceUrl);
   const cardSubTitle = (
@@ -179,24 +244,61 @@ export const LayerComponent = ({
   );
 
   const cardActions = (
-    <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
-      {layer?.hasError && (
-        <Tooltip title="Layer has an error">
-          <WarningAmberIcon color="warning" fontSize="small" />
-        </Tooltip>
-      )}
-      <Tooltip title="Remove this layer">
-        <IconButton
-          size="small"
-          aria-label="Remove layer"
-          onClick={() => {
-            removeLayer();
-          }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
-    </Stack>
+    <Tooltip title="Remove this layer">
+      <IconButton
+        size="small"
+        aria-label="Remove layer"
+        onClick={() => {
+          removeLayer();
+        }}
+        sx={{
+          // Bleeds through the header's own padding (undone via the
+          // negative margin on .MuiCardHeader-action below) so this spans
+          // the header's full height edge-to-edge, rather than sitting as
+          // a smaller button centered within it.
+          height: '100%',
+          width: 32,
+          borderRadius: 0,
+          bgcolor: (theme) => alpha(theme.palette.error.main, 0.12),
+          '&:hover': {
+            bgcolor: (theme) => alpha(theme.palette.error.main, 0.24),
+          },
+        }}
+      >
+        <CloseIcon fontSize="small" />
+      </IconButton>
+    </Tooltip>
+  );
+
+  // Floats over the card's own top-right corner rather than sitting
+  // inline in the header's action row, so it reads as a badge on the
+  // layer rather than just another toolbar icon - and can be bigger
+  // without pushing the remove button around.
+  const errorBadge = (layer?.hasError || hasImageLoadError) && (
+    <Tooltip
+      title={
+        layer?.hasError
+          ? 'Layer has an error'
+          : "Server unreachable - could not load this layer's image"
+      }
+    >
+      <WarningAmberIcon
+        color="warning"
+        sx={{
+          position: 'absolute',
+          // The card itself clips overflow (to keep the header/content's
+          // rounded corners), so this sits just inside the top-right
+          // corner rather than poking outside it.
+          top: 4,
+          right: 4,
+          fontSize: 28,
+          bgcolor: 'background.paper',
+          borderRadius: '50%',
+          boxShadow: 2,
+          zIndex: 1,
+        }}
+      />
+    </Tooltip>
   );
 
   // Both the header and the footer share this tint, so the card reads as
@@ -215,6 +317,7 @@ export const LayerComponent = ({
       className="layercomponent_item"
       elevation={0}
       sx={{
+        position: 'relative',
         borderRadius: 2,
         overflow: 'hidden',
         border: '1px solid',
@@ -222,6 +325,7 @@ export const LayerComponent = ({
         boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.08)',
       }}
     >
+      {errorBadge}
       <CardHeader
         title={cardTitle}
         subheader={cardSubTitle}
@@ -230,7 +334,12 @@ export const LayerComponent = ({
           title: {
             fontSize: '0.95rem',
             fontWeight: 600,
-            noWrap: true,
+            // cardTitle now carries its own copy icon + truncation (see
+            // its own definition above) rather than being plain text, so
+            // Typography's own noWrap (meant for a single text node)
+            // would otherwise just add conflicting overflow/white-space
+            // rules on top of that.
+            sx: { minWidth: 0 },
           },
           subheader: {
             fontSize: '0.8rem',
@@ -240,9 +349,23 @@ export const LayerComponent = ({
         sx={{
           ...barSx,
           py: 1,
-          px: 1.5,
+          pl: 1.5,
+          pr: 0,
+          alignItems: 'stretch',
           '& .MuiCardHeader-content': { minWidth: 0 },
-          '& .MuiCardHeader-action': { margin: 0, alignSelf: 'center' },
+          '& .MuiCardHeader-action': {
+            margin: 0,
+            ml: 1,
+            // Cancels out the header's own py (top/bottom) so the action
+            // slot - and so the remove button inside it, at height: 100%
+            // - reaches all the way to the header's actual top/bottom
+            // edges instead of stopping at the padded content box. The
+            // card's own overflow: hidden + border-radius then clips the
+            // button's square corner into the card's rounded one.
+            my: -1,
+            alignSelf: 'stretch',
+            display: 'flex',
+          },
         }}
       />
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -322,6 +445,17 @@ export const LayerComponent = ({
           borderColor: 'divider',
         }}
       >
+        <Tooltip title="Layer settings">
+          <IconButton
+            size="small"
+            aria-label="Layer settings"
+            onClick={() => {
+              openLayerDetails(layer.id);
+            }}
+          >
+            <SettingsIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Move layer up">
           <span>
             <IconButton
@@ -383,17 +517,6 @@ export const LayerComponent = ({
               ? `${lastGetMapDurationMs} ms`
               : '--- ms'}
           </Typography>
-        </Tooltip>
-        <Tooltip title="Layer settings">
-          <IconButton
-            size="small"
-            aria-label="Layer settings"
-            onClick={() => {
-              openLayerDetails(layer.id);
-            }}
-          >
-            <SettingsIcon fontSize="small" />
-          </IconButton>
         </Tooltip>
         <Tooltip title="Play animation based on this layer">
           <IconButton

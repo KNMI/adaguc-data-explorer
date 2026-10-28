@@ -12,6 +12,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import GitHubIcon from '@mui/icons-material/GitHub';
 
 const REPO_URL = 'https://github.com/KNMI/adaguc-data-explorer';
+const SERVER_REPO_URL = 'https://github.com/KNMI/adaguc-server';
 
 export interface AdagucAboutDialogProps {
   isDialogOpen: boolean;
@@ -76,6 +77,15 @@ const AdagucAboutDialog = ({
           >
             <GitHubIcon fontSize="small" />
             {REPO_URL}
+          </Link>
+          <Link
+            href={SERVER_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+          >
+            <GitHubIcon fontSize="small" />
+            {SERVER_REPO_URL}
           </Link>
           <Typography variant="caption" color="text.secondary">
             Built on {new Date(__BUILD_DATE__).toLocaleString()}

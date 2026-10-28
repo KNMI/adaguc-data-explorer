@@ -31,6 +31,9 @@ const makeFetchMock = (
   const mockFetch = jest.fn((url: string, init?: RequestInit) => {
     calls.push({ url, init });
     return handler(url).then((body) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () => Promise.resolve(body),
     }));
   });
@@ -525,6 +528,155 @@ describe('AutoWMS', () => {
     await waitForLoadingToFinish();
   });
 
+  it('navigates up one level via the full-width button below the header', async () => {
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=sub')) {
+        return Promise.resolve({ result: [] });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    fireEvent.click(await screen.findByText('SubFolder'));
+    await waitFor(() => {
+      expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Up one level (full width)' }),
+    );
+
+    expect(screen.getByText(/Current path: *$/)).toBeInTheDocument();
+  });
+
+  it('navigates up one level when Backspace is pressed outside a text field', async () => {
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=sub')) {
+        return Promise.resolve({ result: [] });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    fireEvent.click(await screen.findByText('SubFolder'));
+    await waitFor(() => {
+      expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
+    });
+
+    // Nothing focused right now (the click above didn't land on a text
+    // field), so document.activeElement is document.body.
+    fireEvent.keyDown(document.body, { key: 'Backspace' });
+
+    expect(screen.getByText(/Current path: *$/)).toBeInTheDocument();
+  });
+
+  it('does not navigate up when Backspace is pressed while typing in the dataset filter', async () => {
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=sub')) {
+        return Promise.resolve({
+          result: [{ path: 'sub/leaf1', name: 'Leaf1', leaf: false }],
+        });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    fireEvent.click(await screen.findByText('SubFolder'));
+    await screen.findByText('Leaf1');
+    expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
+
+    const filterInput = screen.getByLabelText('Filter datasets');
+    filterInput.focus();
+    fireEvent.keyDown(filterInput, { key: 'Backspace' });
+
+    // Still inside "sub" - the shortcut didn't fire while filtering, so
+    // this hasn't navigated back up to the root (which would show
+    // "SubFolder" instead of "Leaf1").
+    expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
+    expect(screen.getByText('Leaf1')).toBeInTheDocument();
+  });
+
+  it('does not navigate up on Backspace while a different side-panel tab is active', async () => {
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=sub')) {
+        return Promise.resolve({ result: [] });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [{ path: 'sub', name: 'SubFolder', leaf: false }],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    const { rerender } = render(<AutoWMS addLayer={jest.fn()} isActive />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    fireEvent.click(await screen.findByText('SubFolder'));
+    await waitFor(() => {
+      expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
+    });
+
+    rerender(<AutoWMS addLayer={jest.fn()} isActive={false} />);
+
+    fireEvent.keyDown(document.body, { key: 'Backspace' });
+
+    expect(screen.getByText(/Current path: sub/)).toBeInTheDocument();
+  });
+
   it('filters the dataset/folder list by name', async () => {
     const mockFetch = makeFetchMock((url) => {
       if (url === './config.json') {
@@ -769,6 +921,108 @@ describe('AutoWMS', () => {
     expect(screen.getByText('Test abstract')).toBeInTheDocument();
     expect(screen.queryByText('No items found.')).not.toBeInTheDocument();
     expect(screen.queryByText(/No layers match/)).not.toBeInTheDocument();
+  });
+
+  it("keeps showing a dataset's layers after clicking refresh", async () => {
+    // Regression guard: refresh() used to always go through
+    // fetchAutoWMSList (bumping autoWMSFetchGeneration), which
+    // unconditionally resets ogcWMSService to '' as part of navigating to
+    // a *different* folder - a side effect that's wrong here, since
+    // refreshing while a leaf dataset's layers are shown should reload
+    // those same layers, not the (invisible, unrelated) parent folder
+    // listing. That reset raced fetchLayersFromOGCWMSService's own
+    // freshly-started request for the real layers and got it discarded by
+    // ogcServiceRequestIdRef's stale-response guard, so clicking refresh
+    // while viewing a dataset's layers silently emptied the panel.
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=/adaguc::datasets')) {
+        return Promise.resolve({
+          result: [
+            {
+              path: '/adaguc::datasets/adaguc.tests.wikgeneric.xml',
+              name: 'adaguc.tests.wikgeneric',
+              leaf: true,
+              adaguc:
+                'https://example.com/adaguc-server/adagucserver?dataset=adaguc.tests.wikgeneric&',
+            },
+          ],
+        });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [
+            {
+              path: '/adaguc::datasets',
+              name: 'adaguc::datasets',
+              leaf: false,
+            },
+          ],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([
+      { name: 'layer1', title: 'Layer One', styles: [] },
+    ] as unknown as LayerProps[]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: 'Test abstract',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    fireEvent.click(await screen.findByText('adaguc::datasets'));
+    fireEvent.click(await screen.findByText('adaguc.tests.wikgeneric'));
+
+    expect(await screen.findByText('Layer One')).toBeInTheDocument();
+    await waitForLoadingToFinish();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByText('Layer One')).toBeInTheDocument();
+    expect(screen.queryByText('No items found.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No layers match/)).not.toBeInTheDocument();
+  });
+
+  it('shows a could-not-reach message, not "No items found.", when the service is unreachable', async () => {
+    // Regression guard: a network-level failure (wrong host/port, service
+    // down, ...) used to look identical to a service that loaded fine but
+    // legitimately has nothing in it - both left `result.result` empty, so
+    // the explorer showed the same "No items found." either way. Reported
+    // against http://localhost:8080/autowms, a host nothing was listening
+    // on.
+    const mockFetch = jest.fn((url: string) => {
+      if (url === './config.json') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+      }
+      return Promise.reject(new TypeError('Failed to fetch'));
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    expect(
+      await screen.findByText(
+        `Could not reach ${AUTOWMS_URL}request=getfiles&path= - the service could not be reached.`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No items found.')).not.toBeInTheDocument();
   });
 
   it('loads an externally requested service, bypassing manual typing', async () => {
