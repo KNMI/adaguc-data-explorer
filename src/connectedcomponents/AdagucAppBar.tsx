@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { AppBar, Box, IconButton, Toolbar, Tooltip } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import CreateLinkIcon from '@mui/icons-material/Link';
+import SharePermalinkIcon from '@mui/icons-material/Share';
 import PublicIcon from '@mui/icons-material/Public';
 import AdagucAboutDialog from './AdagucAboutDialog';
 import AdagucAddDataDialog from './AdagucAddDataDialog';
@@ -77,17 +77,19 @@ const AdagucAppBar = (): React.ReactElement => {
           >
             <MenuIcon sx={{ fontSize: 28 }} />
           </IconButton>
-          <IconButton
-            size="large"
-            color="inherit"
-            aria-label="menu"
-            sx={{ mr: 2 }}
-            onClick={() => {
-              setCreateLinkDialogOpen(true);
-            }}
-          >
-            <CreateLinkIcon sx={{ fontSize: 28 }} />
-          </IconButton>
+          <Tooltip title="Share permalink">
+            <IconButton
+              size="large"
+              color="inherit"
+              aria-label="Share permalink"
+              sx={{ mr: 2 }}
+              onClick={() => {
+                setCreateLinkDialogOpen(true);
+              }}
+            >
+              <SharePermalinkIcon sx={{ fontSize: 28 }} />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="About Adaguc Data Explorer (ADE)">
             <IconButton
               size="large"

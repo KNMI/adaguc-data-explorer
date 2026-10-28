@@ -8,7 +8,8 @@ jest.mock('./AdagucAddDataDialog', () => ({
 }));
 jest.mock('./AdagucCreatePermalinkDialog', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ isDialogOpen }: { isDialogOpen: boolean }) =>
+    isDialogOpen ? <div data-testid="permalink-dialog" /> : null,
 }));
 jest.mock('./PredefinedAreasDialog', () => ({
   __esModule: true,
@@ -41,6 +42,20 @@ describe('AdagucAppBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Predefined areas' }));
 
     expect(screen.getByTestId('predefined-areas-dialog')).toBeInTheDocument();
+  });
+
+  it('opens the permalink dialog from its own, distinctly-labelled toolbar button', () => {
+    // Regression guard: this button and the "Add data" one both used the
+    // generic aria-label "menu", an accessibility bug (two controls with
+    // the same accessible name) that also made this button impossible to
+    // target by its own role/name in a test.
+    render(<AdagucAppBar />);
+
+    expect(screen.queryByTestId('permalink-dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share permalink' }));
+
+    expect(screen.getByTestId('permalink-dialog')).toBeInTheDocument();
   });
 
   it('shows the logo on the right of the toolbar, which opens the about dialog', () => {

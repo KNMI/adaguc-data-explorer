@@ -699,6 +699,78 @@ describe('AutoWMS', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the layers of a dataset selected after navigating into a folder, not a blank panel', async () => {
+    // Regression guard: clicking a leaf dataset bumps a generation counter
+    // to force its own GetCapabilities-fetching effect to re-run even
+    // when ogcWMSService ends up the same value as before - but that
+    // counter used to be shared with the *folder-listing* effect too.
+    // Since autoWMSService (the folder-listing service, as opposed to
+    // ogcWMSService, the per-dataset one) is still the non-leaf AutoWMS
+    // explorer url at the moment a leaf is clicked, bumping a shared
+    // counter also re-ran fetchAutoWMSList - whose own synchronous
+    // setOGCWMSService('') reset cleared the service the click handler
+    // had just set, one effect later in the same commit. That emptied
+    // ogcWMSService again, which re-ran the layers effect a second time
+    // with nothing to fetch, bumping ogcServiceRequestIdRef past the
+    // value the real (still in-flight) GetCapabilities request was
+    // tagged with - so its own guard discarded that real response when
+    // it arrived. The panel was left completely blank: no layers, no "No
+    // layers match" message, not even the WMS service header/link -
+    // exactly as reported against a real deployment.
+    const mockFetch = makeFetchMock((url) => {
+      if (url === './config.json') {
+        return Promise.resolve({});
+      }
+      if (url.includes('path=/adaguc::datasets')) {
+        return Promise.resolve({
+          result: [
+            {
+              path: '/adaguc::datasets/adaguc.tests.wikgeneric.xml',
+              name: 'adaguc.tests.wikgeneric',
+              leaf: true,
+              adaguc:
+                'https://example.com/adaguc-server/adagucserver?dataset=adaguc.tests.wikgeneric&',
+            },
+          ],
+        });
+      }
+      if (url.includes('request=getfiles')) {
+        return Promise.resolve({
+          result: [
+            {
+              path: '/adaguc::datasets',
+              name: 'adaguc::datasets',
+              leaf: false,
+            },
+          ],
+        });
+      }
+      return Promise.resolve({ result: [] });
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockQueryWMSLayers.mockResolvedValue([
+      { name: 'layer1', title: 'Layer One', styles: [] },
+    ] as unknown as LayerProps[]);
+    mockQueryWMSServiceInfo.mockResolvedValue({
+      abstract: 'Test abstract',
+    } as unknown as WMSServiceInfo);
+
+    render(<AutoWMS addLayer={jest.fn()} />);
+    await flushConfigFetch(mockFetch);
+
+    const input = screen.getByLabelText('Add AutoWMS or WMS service');
+    fireEvent.change(input, { target: { value: AUTOWMS_URL } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load service' }));
+
+    fireEvent.click(await screen.findByText('adaguc::datasets'));
+    fireEvent.click(await screen.findByText('adaguc.tests.wikgeneric'));
+
+    expect(await screen.findByText('Layer One')).toBeInTheDocument();
+    expect(screen.getByText('Test abstract')).toBeInTheDocument();
+    expect(screen.queryByText('No items found.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No layers match/)).not.toBeInTheDocument();
+  });
+
   it('loads an externally requested service, bypassing manual typing', async () => {
     // Regression guard: the top bar's "custom WMS service" field (see
     // AdagucAppBar/SideToolPanel) can send a service here directly - it

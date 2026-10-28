@@ -125,7 +125,7 @@ const AutoWMS = ({
   // Guards against a stale AutoWMS listing response, the same way
   // ogcServiceRequestIdRef (below) guards the OGC WMS one: if this fires
   // again (a new path/service, or the same one re-requested - see
-  // loadGeneration further down) before an earlier fetch here has
+  // autoWMSFetchGeneration further down) before an earlier fetch here has
   // resolved, that earlier one's eventual result must not overwrite the
   // newer request's.
   const autoWMSRequestIdRef = React.useRef(0);
@@ -213,18 +213,32 @@ const AutoWMS = ({
     }, 100);
   };
 
-  // Bumped whenever loadAutoWMSService (or the leaf-dataset click handler
-  // below) actually commits a service/dataset to load. The two effects
-  // further down only re-fetch when their own dependencies (path/
-  // autoWMSService, or ogcWMSService) change value - but loadAutoWMSService
-  // can resolve to the exact same value already in state (e.g. re-entering
-  // or re-clicking a service/dataset that's already loaded, such as this
-  // deployment's own config.json default), in which case React bails out
-  // of re-running those effects entirely. Without this, loadAutoWMSService's
-  // own synchronous setResult/setLayers resets above would clear the
-  // list but nothing would ever repopulate it - the explorer gets stuck
-  // on "No items found" even though the service loaded fine.
-  const [loadGeneration, setLoadGeneration] = React.useState(0);
+  // Bumped whenever loadAutoWMSService's non-WMS branch (or refresh, via
+  // fetchAutoWMSList directly) actually commits a folder-listing service
+  // to load. The folder-listing effect further down only re-fetches when
+  // its own dependencies (path/autoWMSService) change value - but
+  // loadAutoWMSService can resolve to the exact same value already in
+  // state (e.g. re-entering or re-clicking a service that's already
+  // loaded, such as this deployment's own config.json default), in which
+  // case React bails out of re-running that effect entirely. Without
+  // this, loadAutoWMSService's own synchronous setResult reset above
+  // would clear the list but nothing would ever repopulate it - the
+  // explorer gets stuck on "No items found" even though the service
+  // loaded fine.
+  //
+  // Kept separate from wmsFetchGeneration below (rather than one shared
+  // counter) deliberately: fetchAutoWMSList's own synchronous
+  // setOGCWMSService('') reset (above) would otherwise also run every
+  // time a leaf dataset is clicked (since that bumps the same counter
+  // this effect depends on), clearing the layer service a moment after
+  // the click handler just set it and cancelling its still-in-flight
+  // GetCapabilities fetch via ogcServiceRequestIdRef's own stale-response
+  // guard - i.e. clicking into a dataset would silently show nothing.
+  const [autoWMSFetchGeneration, setAutoWMSFetchGeneration] = React.useState(0);
+  // Same idea, for the OGC WMS GetCapabilities/layers listing - bumped by
+  // loadAutoWMSService's WMS branch and by the leaf-dataset click handler
+  // below.
+  const [wmsFetchGeneration, setWmsFetchGeneration] = React.useState(0);
 
   // Commits a service immediately, bypassing the debounce below, so the
   // Enter key/Load button (and an externally requested service, see below)
@@ -246,7 +260,7 @@ const AutoWMS = ({
       setAutoWMSService(service);
       setOGCWMSService(service);
       setRecentServices(rememberRecentService(service));
-      setLoadGeneration((generation) => generation + 1);
+      setWmsFetchGeneration((generation) => generation + 1);
       return;
     }
 
@@ -262,7 +276,7 @@ const AutoWMS = ({
         setAutoWMSServiceInput(finalService);
         setAutoWMSService(finalService);
         setRecentServices(rememberRecentService(finalService));
-        setLoadGeneration((generation) => generation + 1);
+        setAutoWMSFetchGeneration((generation) => generation + 1);
       })
       .finally(() => {
         setLoading(false);
@@ -306,11 +320,11 @@ const AutoWMS = ({
     // A filter left over from the previously browsed folder/service would
     // otherwise silently hide items of the one just navigated into.
     setDatasetFilter('');
-    // loadGeneration: see its own declaration above - needed so this still
-    // re-fetches even when path/autoWMSService resolve to the same value
-    // as before.
+    // autoWMSFetchGeneration: see its own declaration above - needed so
+    // this still re-fetches even when path/autoWMSService resolve to the
+    // same value as before.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, autoWMSService, loadGeneration]);
+  }, [path, autoWMSService, autoWMSFetchGeneration]);
 
   React.useEffect(() => {
     fetchLayersFromOGCWMSService();
@@ -318,7 +332,7 @@ const AutoWMS = ({
     // hide every layer of the newly loaded one.
     setLayerFilter('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ogcWMSService, loadGeneration]);
+  }, [ogcWMSService, wmsFetchGeneration]);
 
   // Reveals (and so starts loading) at most MAX_PREVIEW_IMAGES_PER_SECOND
   // new preview images per second, instead of all of them as soon as the
@@ -460,8 +474,8 @@ const AutoWMS = ({
                 // Re-clicking the same already-loaded dataset wouldn't
                 // otherwise change ogcWMSService's value, so the effect
                 // that fetches its layers would never re-run - see
-                // loadGeneration's own declaration above.
-                setLoadGeneration((generation) => generation + 1);
+                // wmsFetchGeneration's own declaration above.
+                setWmsFetchGeneration((generation) => generation + 1);
               }
             }}
           >
