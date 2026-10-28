@@ -55,6 +55,8 @@ export interface LayerComponentProps {
   onDuplicate: () => void;
   getDimensionValue: (dimensionName: string) => string;
   setDimensionValue: (dimensionName: string, dimensionValue: string) => void;
+  getDimensionLinked: (dimensionName: string) => boolean;
+  setDimensionLinked: (dimensionName: string, linked: boolean) => void;
   removeLayer: () => void;
   layerToggleAnimation: () => void;
   zoomToLayer: () => void;
@@ -79,6 +81,8 @@ export const LayerComponent = ({
   isAnimating,
   getDimensionValue,
   setDimensionValue,
+  getDimensionLinked,
+  setDimensionLinked,
   removeLayer,
   layerToggleAnimation,
   zoomToLayer,
@@ -175,7 +179,7 @@ export const LayerComponent = ({
   );
 
   const cardActions = (
-    <Stack direction="row" spacing={0.25} alignItems="center">
+    <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
       {layer?.hasError && (
         <Tooltip title="Layer has an error">
           <WarningAmberIcon color="warning" fontSize="small" />
@@ -222,14 +226,16 @@ export const LayerComponent = ({
         title={cardTitle}
         subheader={cardSubTitle}
         action={cardActions}
-        titleTypographyProps={{
-          fontSize: '0.95rem',
-          fontWeight: 600,
-          noWrap: true,
-        }}
-        subheaderTypographyProps={{
-          fontSize: '0.8rem',
-          component: 'div',
+        slotProps={{
+          title: {
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            noWrap: true,
+          },
+          subheader: {
+            fontSize: '0.8rem',
+            component: 'div',
+          },
         }}
         sx={{
           ...barSx,
@@ -241,7 +247,7 @@ export const LayerComponent = ({
       />
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         <Stack spacing={1}>
-          <Stack direction="row" spacing={0.5} alignItems="center">
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
             <CopyToClipBoard
               info={`layer name (${layer?.name})`}
               text={layer?.name}
@@ -257,7 +263,7 @@ export const LayerComponent = ({
               />
             </Box>
           </Stack>
-          <Stack direction="row" spacing={0.5} alignItems="center">
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
             <CopyToClipBoard
               info={`style name (${selectedStyleName}) for layer ${layer?.name}`}
               text={selectedStyleName}
@@ -279,7 +285,7 @@ export const LayerComponent = ({
                 key={`${layer.name}${layerDimension.name}${layerIndex}`}
                 direction="row"
                 spacing={0.5}
-                alignItems="center"
+                sx={{ alignItems: 'center' }}
               >
                 <CopyToClipBoard
                   info={`${layerDimension.name} value (${dimensionValue}) for layer ${layer?.name}`}
@@ -293,6 +299,10 @@ export const LayerComponent = ({
                       setDimensionValue(layerDimension.name, value);
                     }}
                     dimensionName={layerDimension.name}
+                    linked={getDimensionLinked(layerDimension.name)}
+                    onToggleLinked={(linked) => {
+                      setDimensionLinked(layerDimension.name, linked);
+                    }}
                   />
                 </Box>
               </Stack>

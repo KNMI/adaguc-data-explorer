@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 /* eslint-disable react/jsx-props-no-spreading */
 import * as React from 'react';
-import { Box, IconButton, Slider, Typography } from '@mui/material';
+import { Box, IconButton, Slider, Tooltip, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
@@ -23,6 +23,10 @@ interface WMSDimensionSliderProps {
   layerId: string;
   onSelectDimensionValue: (dimensionValue: string) => void;
   dimensionName: string;
+  // Whether this dimension is "linked": changing it on any other linked
+  // layer's matching dimension also updates this one to match.
+  linked: boolean;
+  onToggleLinked: (linked: boolean) => void;
 }
 
 const WMSDimensionSlider = ({
@@ -30,6 +34,8 @@ const WMSDimensionSlider = ({
   layerId,
   onSelectDimensionValue: onSelectDimValue,
   dimensionName = 'time',
+  linked,
+  onToggleLinked,
 }: WMSDimensionSliderProps): React.ReactElement<WMSDimensionSliderProps> => {
   const wmLayer = getWMLayerById(layerId);
   if (!wmLayer) {
@@ -71,18 +77,25 @@ const WMSDimensionSlider = ({
 
   return (
     <Box sx={{ height: '100%', margin: '0', padding: 0 }}>
-      <Typography fontSize="12px">
+      <Typography sx={{ fontSize: '12px' }}>
         Dimension {layerDim?.name} in {layerDim?.units} - ({stateDimIndex}-
         {layerDim.size()})
       </Typography>
       <div style={{ display: 'flex' }}>
-        <Checkbox
-          style={{ padding: 0 }}
-          defaultChecked={layerDim.linked}
-          onChange={(e, checked) => {
-            layerDim.linked = checked;
-          }}
-        />
+        <Tooltip title="Link to other layers with this checked, so changing one changes them all together">
+          <Checkbox
+            style={{ padding: 0 }}
+            checked={linked}
+            onChange={(e, checked) => {
+              onToggleLinked(checked);
+            }}
+            slotProps={{
+              input: {
+                'aria-label': `Link ${dimensionName} dimension for ${layerId}`,
+              },
+            }}
+          />
+        </Tooltip>
         <CustomSlider
           value={stateDimIndex}
           style={{ margin: '10px 0 0 5px', padding: 0 }}
@@ -115,7 +128,7 @@ const WMSDimensionSlider = ({
           <ArrowForwardIosIcon fontSize="inherit" />
         </IconButton>
       </div>
-      <Typography fontSize="12px">{selectedDimValue}</Typography>
+      <Typography sx={{ fontSize: '12px' }}>{selectedDimValue}</Typography>
     </Box>
   );
 };

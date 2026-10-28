@@ -46,7 +46,7 @@ const DataElement = (
     return newView;
   }, [srs, bbox]);
   return (
-    <Grid item style={{ display: 'inline' }}>
+    <Grid style={{ display: 'inline' }}>
       <IconButton
         onClick={() => {
           handleAddData(element);

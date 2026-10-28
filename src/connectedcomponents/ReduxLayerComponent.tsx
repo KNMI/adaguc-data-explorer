@@ -115,6 +115,17 @@ export const ReduxLayerComponent = ({
     );
   };
 
+  const setLayerDimensionLinked = (dimensionName: string, linked: boolean) => {
+    dispatch(
+      actions.setLayerDimensionLinked({
+        mapId,
+        layerIndex,
+        dimensionName,
+        linked,
+      }),
+    );
+  };
+
   const removeLayer = () => {
     dispatch(
       actions.removeLayer({
@@ -226,6 +237,15 @@ export const ReduxLayerComponent = ({
         dimensionValue: string,
       ): void => {
         changeLayerDimension(dimensionName, dimensionValue);
+      }}
+      getDimensionLinked={(dimensionName: string): boolean => {
+        const foundDim = layer?.dimensions?.find(
+          (dim) => dim.name === dimensionName,
+        );
+        return foundDim?.linked ?? false;
+      }}
+      setDimensionLinked={(dimensionName: string, linked: boolean): void => {
+        setLayerDimensionLinked(dimensionName, linked);
       }}
       update={(): void => {}}
       styles={styleList}

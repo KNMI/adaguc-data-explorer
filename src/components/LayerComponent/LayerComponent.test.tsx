@@ -61,6 +61,8 @@ const requiredProps = {
   onDuplicate: jest.fn(),
   getDimensionValue: jest.fn(),
   setDimensionValue: jest.fn(),
+  getDimensionLinked: jest.fn(),
+  setDimensionLinked: jest.fn(),
   removeLayer: jest.fn(),
   layerToggleAnimation: jest.fn(),
   zoomToLayer: jest.fn(),
@@ -320,6 +322,40 @@ describe('LayerComponent', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Copy time value (2024-01-01T00:00:00Z) for layer air_pressure_msl',
     );
+  });
+
+  it("reflects the dimension's linked state and reports toggling it, for the global time slider sync group", () => {
+    const fakeTimeDimension = {
+      name: 'time',
+      units: '',
+      getIndexForValue: jest.fn(() => 0),
+      getValueForIndex: jest.fn(() => '2024-01-01T00:00:00Z'),
+      size: jest.fn(() => 5),
+    };
+    mockGetWMLayerById.mockReturnValue({
+      dimensions: [{ name: 'time', currentValue: '2024-01-01T00:00:00Z' }],
+      getDimension: (name: string) =>
+        name === 'time' ? fakeTimeDimension : undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const setDimensionLinked = jest.fn();
+
+    render(
+      <LayerComponent
+        {...requiredProps}
+        layer={baseLayer}
+        getDimensionValue={jest.fn(() => '2024-01-01T00:00:00Z')}
+        getDimensionLinked={jest.fn(() => false)}
+        setDimensionLinked={setDimensionLinked}
+      />,
+    );
+
+    const linkCheckbox = screen.getByRole('checkbox');
+    expect(linkCheckbox).not.toBeChecked();
+
+    fireEvent.click(linkCheckbox);
+
+    expect(setDimensionLinked).toHaveBeenCalledWith('time', true);
   });
 
   it('shows a placeholder for the last GetMap duration until one has completed', () => {

@@ -4,6 +4,10 @@ import { MapLocation } from '@opengeoweb/webmap-react';
 export interface AdagucLayerDimension {
   name: string;
   currentValue: string;
+  // When true, changing this dimension on any layer (see
+  // reducers.changeLayerDimension) also updates this one to match - lets
+  // e.g. several layers' own time sliders be "linked" into one sync group.
+  linked?: boolean;
 }
 export interface AdagucLayer {
   name: string;

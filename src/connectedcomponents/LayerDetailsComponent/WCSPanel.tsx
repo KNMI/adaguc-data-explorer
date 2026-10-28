@@ -260,7 +260,7 @@ const WCSPanel = ({ mapId, wmLayer }: WCSPanelProps): React.ReactElement => {
 
   if (isLoading) {
     return (
-      <Stack alignItems="center" sx={{ p: 4 }}>
+      <Stack sx={{ alignItems: 'center', p: 4 }}>
         <CircularProgress size={28} />
       </Stack>
     );
@@ -444,7 +444,12 @@ const WCSPanel = ({ mapId, wmLayer }: WCSPanelProps): React.ReactElement => {
           <Typography variant="subtitle2" gutterBottom>
             Dimensions
           </Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ flexWrap: 'wrap' }}
+          >
             {wmLayer.dimensions.map((dimension) => (
               <TextField
                 key={dimension.name}

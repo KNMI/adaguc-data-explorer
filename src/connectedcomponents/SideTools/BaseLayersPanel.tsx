@@ -36,7 +36,7 @@ const BaseLayersPanel = (): React.ReactElement => {
         checked={layer.enabled}
         size="small"
         onChange={(event) => toggleBaseLayer(layer.id, event.target.checked)}
-        inputProps={{ 'aria-label': layer.title }}
+        slotProps={{ input: { 'aria-label': layer.title } }}
       />
       <div>
         <Typography variant="body2">{layer.title}</Typography>

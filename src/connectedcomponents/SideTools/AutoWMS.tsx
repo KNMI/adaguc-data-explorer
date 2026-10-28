@@ -366,20 +366,22 @@ const AutoWMS = ({
           onChange={(e) => {
             setDatasetFilter(e.target.value);
           }}
-          InputProps={{
-            endAdornment: datasetFilter.length > 0 && (
-              <InputAdornment position="end">
-                <IconButton
-                  size="small"
-                  aria-label="Clear dataset filter"
-                  onClick={() => {
-                    setDatasetFilter('');
-                  }}
-                >
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              endAdornment: datasetFilter.length > 0 && (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    aria-label="Clear dataset filter"
+                    onClick={() => {
+                      setDatasetFilter('');
+                    }}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            },
           }}
         />
       </Box>
@@ -428,7 +430,7 @@ const AutoWMS = ({
             </ListItemIcon>
             <ListItemText
               primary={p.name}
-              primaryTypographyProps={{ variant: 'body2' }}
+              slotProps={{ primary: { variant: 'body2' } }}
             />
           </ListItemButton>
         ))}
@@ -443,7 +445,7 @@ const AutoWMS = ({
           {wmsAbstract}
         </Typography>
       )}
-      <Stack direction="row" spacing={0.5} alignItems="center">
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
         <Chip size="small" label="WMS" variant="outlined" />
         <CopyToClipBoard info="WMS Service link" text={wmsLink} />
         <Typography
@@ -498,20 +500,22 @@ const AutoWMS = ({
         onChange={(e) => {
           setLayerFilter(e.target.value);
         }}
-        InputProps={{
-          endAdornment: layerFilter.length > 0 && (
-            <InputAdornment position="end">
-              <IconButton
-                size="small"
-                aria-label="Clear filter"
-                onClick={() => {
-                  setLayerFilter('');
-                }}
-              >
-                <ClearIcon fontSize="small" />
-              </IconButton>
-            </InputAdornment>
-          ),
+        slotProps={{
+          input: {
+            endAdornment: layerFilter.length > 0 && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="Clear filter"
+                  onClick={() => {
+                    setLayerFilter('');
+                  }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          },
         }}
       />
     </Box>
@@ -718,9 +722,9 @@ const AutoWMS = ({
       <Paper sx={{ mx: 1, mb: 1, borderRadius: 2, overflow: 'hidden' }}>
         <Stack
           direction="row"
-          alignItems="center"
-          justifyContent="space-between"
           sx={{
+            alignItems: 'center',
+            justifyContent: 'space-between',
             px: 1.5,
             py: 1,
             bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
@@ -736,7 +740,7 @@ const AutoWMS = ({
                 together would double up the parent segments. */}
             Current path: {currentLeaf || path}
           </Typography>
-          <Stack direction="row" spacing={0.5} flexShrink={0}>
+          <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
             <Tooltip title="Up one level">
               <IconButton
                 size="small"

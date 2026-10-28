@@ -1,4 +1,4 @@
-import { Style, getWMLayerById } from '@opengeoweb/webmap';
+import { Style } from '@opengeoweb/webmap';
 import { MapLocation } from '@opengeoweb/webmap-react';
 import {
   AdagucHistogramBox,
@@ -345,17 +345,43 @@ export const reducers = {
     setDimensionForReduxLayer(draftLayer, dimensionName, dimensionValue);
 
     // Mimic the webmap's old map-level dimension linking: propagate the new
-    // value to other layers that have opted in to sync this dimension name.
+    // value to other layers that have opted in to sync this dimension name
+    // (see setLayerDimensionLinked).
     draftState.maps[mapId].layers.forEach((otherLayer) => {
       if (otherLayer.id === draftLayer.id) {
         return;
       }
-      const otherWmLayer = getWMLayerById(otherLayer.id);
-      const otherDim = otherWmLayer?.getDimension(dimensionName);
+      const otherDim = otherLayer.dimensions.find(
+        (dim) => dim.name === dimensionName,
+      );
       if (otherDim?.linked) {
         setDimensionForReduxLayer(otherLayer, dimensionName, dimensionValue);
       }
     });
+  },
+  // Toggles whether a layer's dimension is "linked": changing it on any
+  // other linked layer then also updates this one, and vice versa - see
+  // changeLayerDimension's propagation.
+  setLayerDimensionLinked: (
+    draftState: AdagucMapsState,
+    action: {
+      payload: {
+        mapId: string;
+        layerIndex: number;
+        dimensionName: string;
+        linked: boolean;
+      };
+    },
+  ): AdagucMapsState => {
+    const { mapId, layerIndex, dimensionName, linked } = action.payload;
+    const draftLayer = getReduxLayer(draftState, mapId, layerIndex);
+    if (!draftLayer) {
+      return;
+    }
+    const dim = draftLayer.dimensions.find((d) => d.name === dimensionName);
+    if (dim) {
+      dim.linked = linked;
+    }
   },
   // Mirrors the layer's own time-animation step back into redux, so the
   // sidebar's time slider (which reads the layer's redux-tracked

@@ -53,6 +53,15 @@ export const SortableLayerList = ({
         list={layersInMap.map((l) => {
           return { id: l };
         })}
+        // Without a handle, SortableJS treats a mousedown ANYWHERE in a
+        // layer card (including dragging a dimension/opacity slider's
+        // thumb) as the start of a reorder-drag of the whole card - this
+        // excludes every interactive control a layer card renders from
+        // being able to start one instead, leaving those still fully
+        // usable (preventOnFilter: false, so SortableJS doesn't swallow
+        // their own mousedown handling).
+        filter="input, button, [role='button'], .MuiSlider-root"
+        preventOnFilter={false}
       >
         {layersInMap.map((layerId, k): React.ReactElement => {
           return (

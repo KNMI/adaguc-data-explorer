@@ -9,6 +9,7 @@ import { thunks } from '../../store/thunks';
 import QueryPanel from './QueryPanel';
 import LegendPanel from './LegendPanel';
 import BaseLayersPanel from './BaseLayersPanel';
+import TimePanel from './TimePanel';
 
 export interface ToolPanelInterface {
   toggleExpandToolsPanel: (boolean) => void;
@@ -122,6 +123,15 @@ const SideToolPanel = ({
             >
               Baselayers
             </Button>
+            <Button
+              size="small"
+              variant={tabPage === 'Time' ? 'contained' : 'outlined'}
+              onClick={() => {
+                setTabPage('Time');
+              }}
+            >
+              Time
+            </Button>
           </>
         )}
       </div>
@@ -169,6 +179,15 @@ const SideToolPanel = ({
           }}
         >
           <BaseLayersPanel />
+        </div>
+        <div
+          className="time_panel_container"
+          style={{
+            display: tabPage === 'Time' ? 'block' : 'none',
+            height: '100%',
+          }}
+        >
+          <TimePanel mapId={mapId} />
         </div>
       </div>
     </div>

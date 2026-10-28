@@ -58,8 +58,8 @@ const PredefinedAreasDialog = ({
       // No fixed height - with 11 presets, 40vh was forcing a scrollbar on
       // most screens. Growing to fit the content (capped at 80vh so it
       // still fits on small screens) shows every tile at once instead.
-      PaperProps={{
-        sx: { width: '70vw', maxWidth: '70vw', maxHeight: '80vh' },
+      slotProps={{
+        paper: { sx: { width: '70vw', maxWidth: '70vw', maxHeight: '80vh' } },
       }}
     >
       <DialogTitle>Predefined areas</DialogTitle>

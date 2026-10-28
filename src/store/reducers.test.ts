@@ -367,3 +367,179 @@ describe('reducers.syncAnimatedLayerDimension', () => {
     ]);
   });
 });
+
+describe('reducers.changeLayerDimension', () => {
+  const mapId = 'map1';
+
+  const buildState = (): AdagucMapsState => ({
+    services: {},
+    baseLayers: [],
+    maps: {
+      [mapId]: {
+        isAnimating: true,
+        isGetFeatureInfoActive: false,
+        isHistogramBoxSelectActive: false,
+        layers: [
+          {
+            id: 'layer-1',
+            name: 'air_pressure_msl',
+            serviceUrl: 'http://localhost:8080/adagucserver',
+            style: 'default',
+            dimensions: [
+              { name: 'time', currentValue: '2025-01-01T00:00:00Z' },
+            ],
+            enabled: true,
+            opacity: 1,
+          },
+          {
+            id: 'layer-2',
+            name: 'air_temperature',
+            serviceUrl: 'http://localhost:8080/adagucserver',
+            style: 'default',
+            dimensions: [
+              {
+                name: 'time',
+                currentValue: '2025-01-01T00:00:00Z',
+                linked: true,
+              },
+            ],
+            enabled: true,
+            opacity: 1,
+          },
+          {
+            id: 'layer-3',
+            name: 'wind_speed',
+            serviceUrl: 'http://localhost:8080/adagucserver',
+            style: 'default',
+            dimensions: [
+              // Not linked - must not follow.
+              { name: 'time', currentValue: '2025-01-01T00:00:00Z' },
+            ],
+            enabled: true,
+            opacity: 1,
+          },
+        ],
+        view: {
+          srs: 'EPSG:3857',
+          bbox: { left: -1, bottom: -1, right: 1, top: 1 },
+        },
+      },
+    },
+  });
+
+  it('propagates the new value to other layers whose matching dimension is linked, but not unlinked ones', () => {
+    // Regression guard: this mimics the webmap's old map-level dimension
+    // linking (see WMSDimensionSlider's "link" checkbox) - a redux-tracked
+    // flag, not the live WMLayer's own (non-reactive) dimension object.
+    const state = buildState();
+
+    reducers.changeLayerDimension(state, {
+      payload: {
+        mapId,
+        layerIndex: 0,
+        dimensionName: 'time',
+        dimensionValue: '2025-01-01T05:00:00Z',
+      },
+    });
+
+    expect(state.maps[mapId].layers[0].dimensions[0].currentValue).toBe(
+      '2025-01-01T05:00:00Z',
+    );
+    expect(state.maps[mapId].layers[1].dimensions[0].currentValue).toBe(
+      '2025-01-01T05:00:00Z',
+    );
+    expect(state.maps[mapId].layers[2].dimensions[0].currentValue).toBe(
+      '2025-01-01T00:00:00Z',
+    );
+  });
+
+  it('turns animation off', () => {
+    const state = buildState();
+
+    reducers.changeLayerDimension(state, {
+      payload: {
+        mapId,
+        layerIndex: 0,
+        dimensionName: 'time',
+        dimensionValue: '2025-01-01T05:00:00Z',
+      },
+    });
+
+    expect(state.maps[mapId].isAnimating).toBe(false);
+  });
+});
+
+describe('reducers.setLayerDimensionLinked', () => {
+  const mapId = 'map1';
+
+  const buildState = (): AdagucMapsState => ({
+    services: {},
+    baseLayers: [],
+    maps: {
+      [mapId]: {
+        isAnimating: false,
+        isGetFeatureInfoActive: false,
+        isHistogramBoxSelectActive: false,
+        layers: [
+          {
+            id: 'layer-1',
+            name: 'air_pressure_msl',
+            serviceUrl: 'http://localhost:8080/adagucserver',
+            style: 'default',
+            dimensions: [
+              { name: 'time', currentValue: '2025-01-01T00:00:00Z' },
+            ],
+            enabled: true,
+            opacity: 1,
+          },
+        ],
+        view: {
+          srs: 'EPSG:3857',
+          bbox: { left: -1, bottom: -1, right: 1, top: 1 },
+        },
+      },
+    },
+  });
+
+  it('sets linked to true, then back to false', () => {
+    const state = buildState();
+
+    reducers.setLayerDimensionLinked(state, {
+      payload: { mapId, layerIndex: 0, dimensionName: 'time', linked: true },
+    });
+    expect(state.maps[mapId].layers[0].dimensions[0].linked).toBe(true);
+
+    reducers.setLayerDimensionLinked(state, {
+      payload: { mapId, layerIndex: 0, dimensionName: 'time', linked: false },
+    });
+    expect(state.maps[mapId].layers[0].dimensions[0].linked).toBe(false);
+  });
+
+  it('does nothing when the dimension does not exist on the layer', () => {
+    const state = buildState();
+
+    expect(() =>
+      reducers.setLayerDimensionLinked(state, {
+        payload: {
+          mapId,
+          layerIndex: 0,
+          dimensionName: 'elevation',
+          linked: true,
+        },
+      }),
+    ).not.toThrow();
+    expect(state.maps[mapId].layers[0].dimensions).toEqual([
+      { name: 'time', currentValue: '2025-01-01T00:00:00Z' },
+    ]);
+  });
+
+  it('does nothing when the layer index does not exist', () => {
+    const state = buildState();
+
+    expect(() =>
+      reducers.setLayerDimensionLinked(state, {
+        payload: { mapId, layerIndex: 5, dimensionName: 'time', linked: true },
+      }),
+    ).not.toThrow();
+  });
+});

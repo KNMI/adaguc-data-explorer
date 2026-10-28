@@ -28,6 +28,7 @@ jest.mock('./BaseLayersPanel', () => ({
   __esModule: true,
   default: () => null,
 }));
+jest.mock('./TimePanel', () => ({ __esModule: true, default: () => null }));
 
 jest.mock('../../store/store', () => ({
   actions: {
@@ -165,6 +166,20 @@ describe('SideToolPanel', () => {
     });
 
     expect(screen.getByText('AutoWMS').getAttribute('class')).toContain(
+      'MuiButton-contained',
+    );
+  });
+
+  it('switches to the Time tab, next to Baselayers', () => {
+    render(
+      <SideToolPanel toolsPanelIsExpanded toggleExpandToolsPanel={jest.fn()} />,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByText('Time'));
+    });
+
+    expect(screen.getByText('Time').getAttribute('class')).toContain(
       'MuiButton-contained',
     );
   });
