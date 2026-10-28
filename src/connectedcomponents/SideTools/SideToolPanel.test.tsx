@@ -170,6 +170,21 @@ describe('SideToolPanel', () => {
     );
   });
 
+  it("lets the main tab bar grow past its 40px minimum, so wrapped tab buttons don't overlap the panel below", () => {
+    // Regression guard: a narrow panel wraps the 5 main tab buttons onto a
+    // second line - a fixed (rather than minimum) height here used to
+    // clip at the first line, so that wrapped second line overflowed
+    // and overlapped whatever rendered right after this bar instead of
+    // the bar growing to fit it.
+    const { container } = render(
+      <SideToolPanel toolsPanelIsExpanded toggleExpandToolsPanel={jest.fn()} />,
+    );
+
+    const tabBar = container.querySelector('[style*="min-height"]');
+    expect(tabBar).not.toBeNull();
+    expect(tabBar).toHaveStyle({ minHeight: '40px' });
+  });
+
   it('switches to the Time tab, next to Baselayers', () => {
     render(
       <SideToolPanel toolsPanelIsExpanded toggleExpandToolsPanel={jest.fn()} />,

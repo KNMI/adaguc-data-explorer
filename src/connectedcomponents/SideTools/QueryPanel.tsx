@@ -12,7 +12,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Button, Typography } from '@mui/material';
+import {
+  Button,
+  Checkbox,
+  FormControlLabel,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { getWMLayerById } from '@opengeoweb/webmap';
 import { MapLocation } from '@opengeoweb/webmap-react';
@@ -27,7 +33,12 @@ import {
 import { getFeatureInfoUrl } from '../../utils/getFeatureInfoUrl';
 import sanitizeHTML from '../../utils/sanitizeHTML';
 import { extractServiceErrorMessage } from '../../utils/extractServiceErrorMessage';
-import { getTimeSeriesUrl } from '../../utils/getTimeSeriesUrl';
+import {
+  DEFAULT_MAX_TIME_STEPS,
+  getTimeDimensionRange,
+  getTimeSeriesUrl,
+  TimeRange,
+} from '../../utils/getTimeSeriesUrl';
 import {
   parseTimeSeriesResponse,
   TimeSeriesResult,
@@ -206,6 +217,15 @@ const formatHistogramTick = (value: number): string =>
 
 const MAX_QUERY_LIMIT_PATTERN = /maxquerylimit=(\d+)/i;
 
+// Several things can trigger a new timeseries request in quick succession
+// - clicking a new map point, editing the Start/End fields keystroke by
+// keystroke, and especially "Follow current time" (see QueryPanel's own
+// followCurrentTime), which can refetch on every single animation/step
+// tick. Debouncing the fetch effect itself (rather than, say, each input
+// field separately) covers all of these the same way: only the last of a
+// rapid burst of changes actually reaches the server.
+const TIMESERIES_FETCH_DEBOUNCE_MS = 400;
+
 // adaguc-server's own maxquerylimit caps the *total* number of cells a
 // request can return - for a timeseries request that's time steps
 // multiplied by every wildcarded series dimension (member, percentile,
@@ -262,8 +282,14 @@ const fetchTimeSeriesForLayer = (
     React.SetStateAction<Record<string, LayerTimeSeriesState>>
   >,
   dimensionLimits?: Record<string, number>,
+  timeRangeOverride?: TimeRange,
 ): void => {
-  const url = getTimeSeriesUrl(layer, mapPinLocation, dimensionLimits);
+  const url = getTimeSeriesUrl(
+    layer,
+    mapPinLocation,
+    dimensionLimits,
+    timeRangeOverride,
+  );
   if (!url) {
     return;
   }
@@ -294,6 +320,7 @@ const fetchTimeSeriesForLayer = (
             mapPinLocation,
             setTimeSeriesResults,
             retryDimensionLimits,
+            timeRangeOverride,
           );
           return;
         }
@@ -351,6 +378,32 @@ const QueryPanel = ({
   const [pinnedSeriesByLayer, setPinnedSeriesByLayer] = React.useState<
     Record<string, ReadonlySet<string>>
   >({});
+  // The user's own explicit start/end for the TimeSeries request, set via
+  // the two editable fields below - undefined means "automatic" (each
+  // layer's own default range, windowed to DEFAULT_MAX_TIME_STEPS - see
+  // getTimeSeriesUrl). Shared across every enabled layer's chart, same as
+  // mapPinLocation is, rather than tracked per layer.
+  const [timeRangeOverride, setTimeRangeOverride] = React.useState<
+    TimeRange | undefined
+  >(undefined);
+  // When checked (the "Follow current time" checkbox below), the request
+  // range is instead recomputed every render, centered on the reference
+  // layer's own current time value - tracking it as it's stepped or
+  // animated - overriding any manual timeRangeOverride while it's on.
+  // Unchecking it again freezes the fields at wherever that tracked range
+  // last landed, by writing it into timeRangeOverride at that point (see
+  // the checkbox's own onChange) - rather than reverting to whatever
+  // timeRangeOverride held from before following was turned on.
+  const [followCurrentTime, setFollowCurrentTime] = React.useState(false);
+  // Local text for the two range fields, so typing a partial/invalid date
+  // doesn't immediately refetch or get clobbered by a re-render - only
+  // committed (onBlur/Enter) into timeRangeOverride once both parse.
+  const [startText, setStartText] = React.useState('');
+  const [endText, setEndText] = React.useState('');
+  // Used (via onBlur's relatedTarget) to tell "moved from Start to End" or
+  // vice versa apart from "left both fields" - see handleRangeFieldBlur.
+  const startFieldRef = React.useRef<HTMLInputElement>(null);
+  const endFieldRef = React.useRef<HTMLInputElement>(null);
 
   const layers = useAppSelector((state: ViewerState): AdagucLayer[] =>
     selectors.getMapLayers(state, mapId),
@@ -409,6 +462,87 @@ const QueryPanel = ({
       ),
     [enabledLayers],
   );
+
+  // The range shown in the two editable fields below before the user has
+  // set their own override - the first enabled, time-aware layer's own
+  // default range (see getTimeSeriesUrl), so the fields start out matching
+  // whatever would actually be requested automatically. Deliberately NOT
+  // memoized on timeSeriesFetchKey (or anything else derived from redux):
+  // getWMLayerById reads a live registry the webmap library populates
+  // asynchronously, outside React/redux entirely, so a layer can already
+  // be enabled in redux before its own live WMLayer (and dimension) exists
+  // - memoizing on a redux-derived key could permanently cache that
+  // not-ready-yet "undefined" from an early render, with nothing left to
+  // ever invalidate it once the registry actually catches up. Recomputing
+  // on every render instead keeps this always reading the registry's
+  // current state; it's just a couple of lookups, cheap enough to not
+  // need memoizing.
+  const referenceLayer = enabledLayers.find(
+    (layer) => !!getWMLayerById(layer.id)?.getDimension('time'),
+  );
+  const defaultTimeDimension = referenceLayer
+    ? getWMLayerById(referenceLayer.id)?.getDimension('time')
+    : undefined;
+  const defaultTimeRange: TimeRange | undefined = defaultTimeDimension
+    ? getTimeDimensionRange(defaultTimeDimension, DEFAULT_MAX_TIME_STEPS)
+    : undefined;
+
+  // The reference layer's own redux-tracked current time value - read from
+  // the same layer defaultTimeDimension came from, so "follow" tracks
+  // whichever layer the default range itself is based on.
+  const referenceLayerCurrentValue = referenceLayer?.dimensions.find(
+    (dimension) => dimension.name === 'time',
+  )?.currentValue;
+  // Recomputed fresh every render (same reasoning as defaultTimeRange
+  // above) so this tracks the current value immediately as it's stepped
+  // or animated, without needing its own effect/subscription.
+  const followedTimeRange: TimeRange | undefined =
+    followCurrentTime && defaultTimeDimension && referenceLayerCurrentValue
+      ? getTimeDimensionRange(
+          defaultTimeDimension,
+          DEFAULT_MAX_TIME_STEPS,
+          referenceLayerCurrentValue,
+        )
+      : undefined;
+  // What's actually sent as the TIME override to every enabled layer's
+  // request - following wins over timeRangeOverride while it's checked
+  // (see followCurrentTime above for what happens once it's unchecked).
+  const activeTimeRangeOverride = followCurrentTime
+    ? followedTimeRange
+    : timeRangeOverride;
+  // A plain string, rather than activeTimeRangeOverride itself, drives the
+  // fetch effect below - same reasoning as effectiveTimeRangeKey just
+  // below (a new object every render otherwise) - this is what lets
+  // "follow" actually refetch as the current value moves, without
+  // depending on every dimension change across every layer (which
+  // timeSeriesFetchKey deliberately excludes - see its own comment).
+  const activeTimeRangeOverrideKey = activeTimeRangeOverride
+    ? `${activeTimeRangeOverride.start}/${activeTimeRangeOverride.end}`
+    : '';
+
+  const effectiveTimeRange = activeTimeRangeOverride ?? defaultTimeRange;
+  // A plain string, rather than effectiveTimeRange itself, drives the sync
+  // effect below - effectiveTimeRange is a new object every render (see
+  // above), which would otherwise re-fire that effect, and so reset
+  // startText/endText, on every render including ones caused by typing in
+  // the fields themselves.
+  const effectiveTimeRangeKey = effectiveTimeRange
+    ? `${effectiveTimeRange.start}/${effectiveTimeRange.end}`
+    : '';
+
+  // Keeps the two fields' displayed text in sync with whichever range is
+  // actually in effect, whenever that changes from outside the fields
+  // themselves (e.g. defaultTimeRange resolving once the registry becomes
+  // ready, or shifting because the set of enabled layers changed) - but
+  // not while the user is actively typing in them, since
+  // effectiveTimeRangeKey only changes via timeRangeOverride once a typed
+  // value is already committed.
+  React.useEffect(() => {
+    setStartText(effectiveTimeRange?.start ?? '');
+    setEndText(effectiveTimeRange?.end ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveTimeRangeKey]);
+
   // Mirrors the time series one: only the fields that actually affect the
   // histogram request should cause a refetch.
   const histogramFetchKey = React.useMemo(
@@ -455,19 +589,37 @@ const QueryPanel = ({
 
   React.useEffect(() => {
     if (!mapPinLocation) {
-      return;
+      return undefined;
     }
-    setTimeSeriesResults({});
-    // A pinned selection from a previous dataset could otherwise point at
-    // a series (e.g. a member number) that doesn't exist in the new one.
-    setPinnedSeriesByLayer({});
-    layers
-      .filter((layer) => layer.enabled)
-      .forEach((layer) => {
-        fetchTimeSeriesForLayer(layer, mapPinLocation, setTimeSeriesResults);
-      });
+    // Debounced: a burst of changes within TIMESERIES_FETCH_DEBOUNCE_MS of
+    // each other (rapid Start/End keystrokes, "Follow current time"
+    // ticking every animation step, ...) only actually fetches once, for
+    // the last one - each new change here reschedules the timeout rather
+    // than piling another request on top of the previous (still in
+    // flight) one. The previously loaded chart is left as-is until then,
+    // rather than clearing it (and briefly flashing "Loading…") for
+    // changes that are about to be superseded anyway.
+    const timeoutId = setTimeout(() => {
+      setTimeSeriesResults({});
+      // A pinned selection from a previous dataset could otherwise point
+      // at a series (e.g. a member number) that doesn't exist in the new
+      // one.
+      setPinnedSeriesByLayer({});
+      layers
+        .filter((layer) => layer.enabled)
+        .forEach((layer) => {
+          fetchTimeSeriesForLayer(
+            layer,
+            mapPinLocation,
+            setTimeSeriesResults,
+            undefined,
+            activeTimeRangeOverride,
+          );
+        });
+    }, TIMESERIES_FETCH_DEBOUNCE_MS);
+    return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapPinLocation, timeSeriesFetchKey]);
+  }, [mapPinLocation, timeSeriesFetchKey, activeTimeRangeOverrideKey]);
 
   React.useEffect(() => {
     if (!histogramBox) {
@@ -547,6 +699,50 @@ const QueryPanel = ({
     );
   };
 
+  // Commits the two range fields' current text into timeRangeOverride,
+  // once both parse as dates - called on blur/Enter rather than on every
+  // keystroke, so a partial/invalid in-progress edit doesn't immediately
+  // refetch or get clobbered by the sync effect above. An invalid commit
+  // (either field doesn't parse) reverts both fields back to whatever
+  // range is actually in effect instead of sending a bad TIME value.
+  const commitTimeRange = (): void => {
+    const start = startText.trim();
+    const end = endText.trim();
+    if (
+      !start ||
+      !end ||
+      Number.isNaN(Date.parse(start)) ||
+      Number.isNaN(Date.parse(end))
+    ) {
+      setStartText(effectiveTimeRange?.start ?? '');
+      setEndText(effectiveTimeRange?.end ?? '');
+      return;
+    }
+    setTimeRangeOverride({ start, end });
+  };
+
+  // Committing on every single blur would fire too early when tabbing (or
+  // clicking) from Start straight to End: Start's blur would commit using
+  // End's still-stale, not-yet-edited text, and the resulting override
+  // change would re-trigger the sync effect above, which would then
+  // immediately overwrite whatever the user had already typed into End
+  // but not yet committed. Only actually committing once focus leaves
+  // both fields (not just moves between them) avoids both problems -
+  // event.relatedTarget identifies where focus is going before this
+  // field's own onChange-driven state updates finish propagating.
+  const handleRangeFieldBlur = (
+    event: React.FocusEvent<HTMLInputElement>,
+  ): void => {
+    const nextFocusTarget = event.relatedTarget;
+    if (
+      nextFocusTarget === startFieldRef.current ||
+      nextFocusTarget === endFieldRef.current
+    ) {
+      return;
+    }
+    commitTimeRange();
+  };
+
   const renderGetFeatureInfoBody = (layer: AdagucLayer): React.ReactNode => (
     <div
       className="getfeatureinfo_result_contents"
@@ -559,7 +755,12 @@ const QueryPanel = ({
 
   const renderTimeSeriesBody = (layer: AdagucLayer): React.ReactNode => {
     const url = mapPinLocation
-      ? getTimeSeriesUrl(layer, mapPinLocation)
+      ? getTimeSeriesUrl(
+          layer,
+          mapPinLocation,
+          undefined,
+          activeTimeRangeOverride,
+        )
       : undefined;
     const state = timeSeriesResults[layer.id];
 
@@ -835,7 +1036,12 @@ const QueryPanel = ({
     }
     if (subTab === 'TimeSeries') {
       const url = mapPinLocation
-        ? getTimeSeriesUrl(layer, mapPinLocation)
+        ? getTimeSeriesUrl(
+            layer,
+            mapPinLocation,
+            undefined,
+            activeTimeRangeOverride,
+          )
         : undefined;
       const state = timeSeriesResults[layer.id];
       return (
@@ -924,6 +1130,71 @@ const QueryPanel = ({
           </Button>
         </div>
         <Typography variant="body2">{subTabInstructions[subTab]}</Typography>
+        {subTab === 'TimeSeries' && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <TextField
+                label="Start"
+                size="small"
+                disabled={followCurrentTime}
+                inputRef={startFieldRef}
+                value={startText}
+                onChange={(event) => setStartText(event.target.value)}
+                onBlur={handleRangeFieldBlur}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    commitTimeRange();
+                  }
+                }}
+                sx={{ width: 190, bgcolor: 'background.paper' }}
+              />
+              <TextField
+                label="End"
+                size="small"
+                disabled={followCurrentTime}
+                inputRef={endFieldRef}
+                value={endText}
+                onChange={(event) => setEndText(event.target.value)}
+                onBlur={handleRangeFieldBlur}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    commitTimeRange();
+                  }
+                }}
+                sx={{ width: 190, bgcolor: 'background.paper' }}
+              />
+              {!followCurrentTime && timeRangeOverride && (
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => setTimeRangeOverride(undefined)}
+                >
+                  Auto
+                </Button>
+              )}
+            </div>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={followCurrentTime}
+                  onChange={(event) => {
+                    const { checked } = event.target;
+                    if (!checked && followedTimeRange) {
+                      // Freezes the fields at wherever following last had
+                      // them, rather than snapping back to an older
+                      // manual override (or the automatic default) set
+                      // before following was turned on.
+                      setTimeRangeOverride(followedTimeRange);
+                    }
+                    setFollowCurrentTime(checked);
+                  }}
+                />
+              }
+              label="Follow current time"
+            />
+          </div>
+        )}
         {subTab === 'Histogram' && (
           <div style={{ marginTop: 8 }}>
             <Button

@@ -30,6 +30,42 @@ describe('parseTimeSeriesResponse', () => {
     });
   });
 
+  // Regression guard: real response from geoservices.knmi.nl RADAR
+  // Reflectivity - the server sends dims as a bare string rather than a
+  // one-element array when there's no series dimension, which used to
+  // throw (dims.findIndex is not a function) and surface as a generic
+  // "Failed to load timeseries" with no real explanation.
+  it('parses a response whose dims is a bare string (not an array) when there is no series dimension', () => {
+    const response = [
+      {
+        name: 'Reflectivity',
+        layername: 'Reflectivity',
+        variablename: 'image1.image_data',
+        standard_name: 'image1.image_data',
+        units: 'dBZ',
+        dims: 'time',
+        data: {
+          '2026-10-28T08:25:00Z': '10.000000',
+          '2026-10-28T08:30:00Z': '11.000000',
+        },
+      },
+    ];
+
+    expect(parseTimeSeriesResponse(response)).toEqual({
+      standardName: 'image1.image_data',
+      units: 'dBZ',
+      series: [
+        {
+          seriesName: '',
+          points: [
+            { time: '2026-10-28T08:25:00Z', value: 10 },
+            { time: '2026-10-28T08:30:00Z', value: 11 },
+          ],
+        },
+      ],
+    });
+  });
+
   // Real response from adaguc.tests.wikgeneric air_pressure_msl, nested one
   // level deep as reference_time -> time -> value.
   it('parses a response nested one level deep (dims: ["reference_time", "time"])', () => {

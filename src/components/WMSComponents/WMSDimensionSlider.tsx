@@ -18,6 +18,13 @@ const CustomSlider = styled(Slider)(() => ({
   },
 }));
 
+// The original value this slider always used - kept short so dragging
+// still feels immediate (the layer visibly tracks the thumb), now that
+// the expensive part of each commit (see lastCommittedValueRef below) is
+// skipped. This still coalesces same-tick duplicate events rather than
+// firing a GetMap request for every single one of them.
+const DEBOUNCE_MS = 50;
+
 interface WMSDimensionSliderProps {
   selectedDimensionValue: string;
   layerId: string;
@@ -48,8 +55,23 @@ const WMSDimensionSlider = ({
     return null;
   }
   const [stateDimIndex, setStateDimIndex] = React.useState<number>(0);
+  // The last value this slider itself committed via onSelectDimValue -
+  // when selectedDimValue's own prop update is just that same value
+  // echoing back down (through redux), stateDimIndex is already correct
+  // (set synchronously in handleChange below) and re-deriving it via
+  // getIndexForValue is skipped. That matters because, for a dimension
+  // with discrete "timevalues" (e.g. RADAR's own, with up to ~200,000
+  // entries), WMJSDimension.getIndexForValue does a full linear scan -
+  // parsing and comparing every single value - on every call; doing that
+  // once per debounced commit during a drag is what makes the slider feel
+  // sluggish. Only a genuinely external change (another linked layer's
+  // slider, the TIME panel, ...) still needs the real lookup.
+  const lastCommittedValueRef = React.useRef<string | undefined>(undefined);
 
   React.useEffect(() => {
+    if (selectedDimValue === lastCommittedValueRef.current) {
+      return;
+    }
     setStateDimIndex(layerDim.getIndexForValue(selectedDimValue));
   }, [selectedDimValue]);
 
@@ -57,12 +79,22 @@ const WMSDimensionSlider = ({
     debounce(
       (dstateDimIndex) => {
         const newValue = layerDim.getValueForIndex(dstateDimIndex) as string;
+        lastCommittedValueRef.current = newValue;
         onSelectDimValue(newValue);
       },
-      50,
-      { leading: true, trailing: true, maxWait: 50 },
+      DEBOUNCE_MS,
+      { leading: true, trailing: true, maxWait: DEBOUNCE_MS },
     ),
   ).current;
+
+  // Cancels a pending trailing commit if this slider unmounts mid-drag
+  // (e.g. its layer is removed, or the panel closes) - otherwise it could
+  // still fire afterwards against a stale layerDim/onSelectDimValue
+  // closure.
+  React.useEffect(
+    () => () => debouncedHandleChange.cancel(),
+    [debouncedHandleChange],
+  );
 
   const handleChange = (event: Event, value: number) => {
     let dimIndex = value;
@@ -70,10 +102,7 @@ const WMSDimensionSlider = ({
     if (dimIndex > layerDim.size() - 1) dimIndex = layerDim.size() - 1;
     setStateDimIndex(dimIndex);
     debouncedHandleChange(dimIndex);
-    // onSelectDimValue(layerDim.getValueForIndex(dimIndex) as string);
   };
-
-  // const dimIndex = layerDim.getIndexForValue(selectedDimValue);
 
   return (
     <Box sx={{ height: '100%', margin: '0', padding: 0 }}>
@@ -102,7 +131,10 @@ const WMSDimensionSlider = ({
           onChange={handleChange}
           size="small"
           min={0}
-          max={layerDim.size()}
+          // The last valid index, not size() itself (an off-by-one past
+          // it) - matches the clamp in handleChange above, so the thumb
+          // can't be dragged to an index getValueForIndex has nothing for.
+          max={layerDim.size() - 1}
           orientation="horizontal"
         />
         <IconButton

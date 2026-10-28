@@ -28,7 +28,10 @@ interface TimeSeriesResponseEntry {
   // The server reports units as "{}" rather than omitting the field when
   // they are unknown for a layer, so this isn't always a string.
   units?: string | Record<string, never>;
-  dims?: string[];
+  // The server sends a bare string (not a one-element array) when there's
+  // only a single dimension (e.g. "time", with no series dimension) -
+  // only an array when there's more than one.
+  dims?: string | string[];
   data?: TimeSeriesDataNode;
 }
 
@@ -102,8 +105,10 @@ export const parseTimeSeriesResponse = (
   }
   const entry = json[0] as TimeSeriesResponseEntry;
   const units = typeof entry.units === 'string' ? entry.units : undefined;
+  const dims =
+    typeof entry.dims === 'string' ? [entry.dims] : (entry.dims ?? []);
 
-  const seriesDimensionIndex = (entry.dims ?? []).findIndex((name) =>
+  const seriesDimensionIndex = dims.findIndex((name) =>
     SERIES_DIMENSION_NAMES.has(name),
   );
 
@@ -127,7 +132,7 @@ export const parseTimeSeriesResponse = (
       return {
         standardName: entry.standard_name,
         units,
-        seriesDimensionName: entry.dims[seriesDimensionIndex],
+        seriesDimensionName: dims[seriesDimensionIndex],
         series,
       };
     }

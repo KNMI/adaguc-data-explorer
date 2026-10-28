@@ -63,7 +63,12 @@ const SideToolPanel = ({
         style={{
           display: 'block',
           width: '100%',
-          height: '40px',
+          // minHeight (not height): the main tab buttons below wrap onto a
+          // second line once the panel's too narrow for all five at once -
+          // a fixed height would stop short of that second line, letting
+          // it overflow and overlap whatever renders right after this div
+          // (e.g. QueryPanel's own sub-tabs) instead of pushing it down.
+          minHeight: '40px',
           marginBottom: '0px',
           background: '#BAD0EF',
         }}

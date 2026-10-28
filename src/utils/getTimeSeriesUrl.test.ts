@@ -2,6 +2,8 @@ import { getWMLayerById } from '@opengeoweb/webmap';
 import { MapLocation } from '@opengeoweb/webmap-react';
 import {
   buildTimeDimensionValue,
+  DEFAULT_MAX_TIME_STEPS,
+  getTimeDimensionRange,
   getTimeSeriesUrl,
   TimeDimensionLike,
 } from './getTimeSeriesUrl';
@@ -47,6 +49,10 @@ const makeTimeDimension = (
   size: () => values.length,
   getFirstValue: () => values[0],
   getLastValue: () => values[values.length - 1],
+  getIndexForValue: (value: string) => {
+    const index = values.indexOf(value);
+    return index === -1 ? 0 : index;
+  },
   getValueForIndex: (index: number) => values[index],
 });
 
@@ -61,22 +67,78 @@ describe('buildTimeDimensionValue', () => {
     expect(buildTimeDimensionValue(dim, 20)).toBe('a/c');
   });
 
-  it('evenly samples at most maxTimeSteps values, always including both endpoints', () => {
+  it('windows down to the last maxTimeSteps values, anchored on the end of the range', () => {
     const values = Array.from({ length: 11 }, (_, i) => `t${i}`);
     const dim = makeTimeDimension(values);
-    // 11 values, asking for 6 - evenly spaced indices land on 0,2,4,6,8,10.
-    expect(buildTimeDimensionValue(dim, 6)).toBe('t0,t2,t4,t6,t8,t10');
+    // 11 values, asking for 6 - keeps the most recent 6 (indices 5..10),
+    // still sent as a plain start/end range rather than every one of
+    // those 6 spelled out.
+    expect(buildTimeDimensionValue(dim, 6)).toBe('t5/t10');
   });
 
-  it('returns a single value (the first) when maxTimeSteps is 1', () => {
+  it('returns a single value (the last) when maxTimeSteps is 1', () => {
     const dim = makeTimeDimension(['t0', 't1', 't2']);
-    expect(buildTimeDimensionValue(dim, 1)).toBe('t0');
+    expect(buildTimeDimensionValue(dim, 1)).toBe('t2');
   });
 
   it('ignores an invalid (zero or negative) maxTimeSteps and falls back to the full range', () => {
     const dim = makeTimeDimension(['a', 'b', 'c', 'd']);
     expect(buildTimeDimensionValue(dim, 0)).toBe('a/d');
     expect(buildTimeDimensionValue(dim, -5)).toBe('a/d');
+  });
+});
+
+describe('getTimeDimensionRange', () => {
+  it('returns the full first/last range when no maxTimeSteps is given', () => {
+    const dim = makeTimeDimension(['a', 'b', 'c']);
+    expect(getTimeDimensionRange(dim)).toEqual({ start: 'a', end: 'c' });
+  });
+
+  it('windows down to the last maxTimeSteps values, matching buildTimeDimensionValue', () => {
+    const values = Array.from({ length: 11 }, (_, i) => `t${i}`);
+    const dim = makeTimeDimension(values);
+    expect(getTimeDimensionRange(dim, 6)).toEqual({ start: 't5', end: 't10' });
+  });
+
+  it('centers the window on centerValue when given, away from either edge', () => {
+    const values = Array.from({ length: 21 }, (_, i) => `t${i}`);
+    const dim = makeTimeDimension(values);
+    // 21 values, asking for 7 around index 10 - lands on indices 7..13.
+    expect(getTimeDimensionRange(dim, 7, 't10')).toEqual({
+      start: 't7',
+      end: 't13',
+    });
+  });
+
+  it('clamps the centered window at the start of the dimension', () => {
+    const values = Array.from({ length: 21 }, (_, i) => `t${i}`);
+    const dim = makeTimeDimension(values);
+    // centerValue near the very start - the window can't shift left past
+    // index 0, so it stays anchored there instead.
+    expect(getTimeDimensionRange(dim, 7, 't1')).toEqual({
+      start: 't0',
+      end: 't6',
+    });
+  });
+
+  it('clamps the centered window at the end of the dimension', () => {
+    const values = Array.from({ length: 21 }, (_, i) => `t${i}`);
+    const dim = makeTimeDimension(values);
+    // centerValue near the very end - the window can't shift right past
+    // the last index, so it stays anchored there instead.
+    expect(getTimeDimensionRange(dim, 7, 't19')).toEqual({
+      start: 't14',
+      end: 't20',
+    });
+  });
+
+  it('falls back to index 0 when centerValue is not one of the dimension own values', () => {
+    const values = Array.from({ length: 21 }, (_, i) => `t${i}`);
+    const dim = makeTimeDimension(values);
+    expect(getTimeDimensionRange(dim, 7, 'not-a-real-value')).toEqual({
+      start: 't0',
+      end: 't6',
+    });
   });
 });
 
@@ -101,10 +163,10 @@ describe('getTimeSeriesUrl', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    // 5 values, asking for 3 - evenly spaced indices land on 0, 2, 4.
-    // URLSearchParams percent-encodes the comma-separated list.
+    // 5 values, asking for 3 - keeps the most recent 3 (indices 2..4) as
+    // a plain start/end range. URLSearchParams percent-encodes the '/'.
     const url = getTimeSeriesUrl(layer, mapPinLocation, { time: 3 });
-    expect(url).toContain('TIME=t0%2Ct2%2Ct4');
+    expect(url).toContain('TIME=t2%2Ft4');
   });
 
   it('requests the full time range when maxStepsByDimension is not given', () => {
@@ -120,6 +182,73 @@ describe('getTimeSeriesUrl', () => {
 
     const url = getTimeSeriesUrl(layer, mapPinLocation);
     expect(url).toContain('TIME=t0%2Ft2');
+  });
+
+  it('caps TIME to DEFAULT_MAX_TIME_STEPS, windowed to the dimension own most recent steps, when no limit is given for it', () => {
+    // A dimension bigger than the default cap (e.g. RADAR's full, years-
+    // long archive at 5-minute resolution) would otherwise ask the server
+    // for every single one of its values in one request - this is what
+    // keeps an ordinary (non-retry) request well within a typical
+    // server-side maxquerylimit by default, without the caller needing to
+    // know anything about this dimension's actual size up front, while
+    // still sending a short, plain start/end range rather than spelling
+    // out DEFAULT_MAX_TIME_STEPS individual values.
+    const values = Array.from({ length: 100 }, (_, i) => `t${i}`);
+    const timeDimension = makeTimeDimension(values);
+    mockGetWMLayerById.mockReturnValue({
+      getmapURL: 'http://example.com/wms?',
+      getLayerName: () => 'air_pressure_msl',
+      getDimension: (name: string) =>
+        name === 'time' ? timeDimension : undefined,
+      getDimensions: () => [timeDimension],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const url = getTimeSeriesUrl(layer, mapPinLocation);
+    const timeParam = new URL(url).searchParams.get('TIME');
+    // 100 values, defaulting to the most recent DEFAULT_MAX_TIME_STEPS.
+    expect(timeParam).toBe(`t${values.length - DEFAULT_MAX_TIME_STEPS}/t99`);
+  });
+
+  it('lets an explicit maxStepsByDimension.time override the default cap', () => {
+    const values = Array.from({ length: 100 }, (_, i) => `t${i}`);
+    const timeDimension = makeTimeDimension(values);
+    mockGetWMLayerById.mockReturnValue({
+      getmapURL: 'http://example.com/wms?',
+      getLayerName: () => 'air_pressure_msl',
+      getDimension: (name: string) =>
+        name === 'time' ? timeDimension : undefined,
+      getDimensions: () => [timeDimension],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const url = getTimeSeriesUrl(layer, mapPinLocation, { time: 5 });
+    const timeParam = new URL(url).searchParams.get('TIME');
+    expect(timeParam).toBe('t95/t99');
+  });
+
+  it('sends an explicit timeRangeOverride verbatim, bypassing the default cap', () => {
+    // A dimension far bigger than DEFAULT_MAX_TIME_STEPS would normally be
+    // windowed down to its own most recent steps - an explicit override
+    // (QueryPanel's editable start/end fields) should still win, since the
+    // whole point of setting it is to ask for exactly that range.
+    const values = Array.from({ length: 1000 }, (_, i) => `t${i}`);
+    const timeDimension = makeTimeDimension(values);
+    mockGetWMLayerById.mockReturnValue({
+      getmapURL: 'http://example.com/wms?',
+      getLayerName: () => 'air_pressure_msl',
+      getDimension: (name: string) =>
+        name === 'time' ? timeDimension : undefined,
+      getDimensions: () => [timeDimension],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const url = getTimeSeriesUrl(layer, mapPinLocation, undefined, {
+      start: '2024-01-01T00:00:00Z',
+      end: '2024-01-02T00:00:00Z',
+    });
+    const timeParam = new URL(url).searchParams.get('TIME');
+    expect(timeParam).toBe('2024-01-01T00:00:00Z/2024-01-02T00:00:00Z');
   });
 
   it('samples a wildcarded series dimension (e.g. member) when it is also given a limit', () => {
